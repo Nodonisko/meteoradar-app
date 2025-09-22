@@ -1,0 +1,22 @@
+---
+description: Project structure and organization rules
+globs: ["**/*.swift"]
+alwaysApply: true
+---
+
+## Project Structure
+
+```
+App/         # App entry point
+Models/      # Data models
+Views/       # SwiftUI views
+Services/    # Business logic
+Utilities/   # Constants & helpers
+Resources/   # Assets
+```
+
+## Key Rules
+
+- **NEVER** put business logic in Views - use Services instead
+- **ALWAYS** use Constants.swift for configuration values
+- **FOLLOW** the existing folder structure when adding new files

@@ -1,0 +1,51 @@
+//
+//  RadarImageRenderer.swift
+//  Meteoradar
+//
+//  Created by Daniel Suchý on 14.09.2025.
+//
+
+import MapKit
+import UIKit
+
+class RadarImageRenderer: MKOverlayRenderer {
+    let radarOverlay: RadarImageOverlay
+    
+    init(overlay: RadarImageOverlay) {
+        self.radarOverlay = overlay
+        super.init(overlay: overlay)
+    }
+    
+    override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
+        guard let image = radarOverlay.image else { return }
+        
+        let rect = self.rect(for: radarOverlay.boundingMapRect)
+        
+        // Save the current graphics state
+        context.saveGState()
+        
+        // Fix coordinate system mismatch between Core Graphics and MapKit
+        // Core Graphics origin is bottom-left, MapKit is top-left
+        context.translateBy(x: 0, y: rect.size.height)
+        context.scaleBy(x: 1.0, y: -1.0)
+        
+        // Set interpolation to nearest neighbor for sharp radar boundaries
+        context.interpolationQuality = .medium
+        
+        // Disable antialiasing for crisp pixel boundaries
+        context.setShouldAntialias(false)
+        
+        // Optional: Set additional rendering options for better performance
+        context.setAllowsAntialiasing(false)
+        
+        // Set blend mode for transparency
+        context.setBlendMode(.normal)
+        context.setAlpha(Constants.Radar.overlayAlpha)
+        
+        // Draw the image
+        context.draw(image.cgImage!, in: rect)
+        
+        // Restore graphics state
+        context.restoreGState()
+    }
+}

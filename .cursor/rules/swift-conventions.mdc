@@ -1,0 +1,18 @@
+---
+description: Project-specific Swift patterns
+globs: ["**/*.swift"]
+alwaysApply: true
+---
+
+## Project-Specific Swift Patterns
+
+### Performance Focus
+
+- **MINIMIZE** location updates with appropriate distance filters and time intervals
+- **USE** efficient image rendering techniques for map overlays
+- **AVOID** unnecessary UI updates in the main thread
+
+### Memory Management for Maps
+
+- **USE** `[weak self]` in location and network closures
+- **HANDLE** map overlay cleanup properly

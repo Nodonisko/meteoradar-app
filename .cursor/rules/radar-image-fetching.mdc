@@ -1,0 +1,21 @@
+---
+description: Critical rules for RadarImageManager to preserve core functionality
+globs:
+  [
+    "**/RadarImageManager.swift",
+    "**/RadarImageSequence.swift",
+    "**/Date+RadarTime.swift",
+  ]
+alwaysApply: true
+---
+
+# Radar Image Fetching
+
+- All times and dates are in UTC
+- New image is published every 5 minutes in time that is divisible by 5 (eg. 00:00, 00:05, 00:10, etc.)
+- Image might now be published imidiately because generating takes few seconds, so server might return 404 or some other error.
+- Sometimes server might be overloaded or down. Make sure to handle errors gracefully.
+- Smart Retry Logic: Each failed image retries once, then continues to older images
+- Sequential Loading: Images load from newest to oldest, one at a time (better for slow connections)
+- File System Caching: All downloaded images are cached to disk with automatic cleanup
+- Cache Management: 50MB limit, 7-day expiration, oldest files removed when space needed

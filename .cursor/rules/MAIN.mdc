@@ -1,0 +1,14 @@
+---
+description: Global rules for the project
+globs:
+alwaysApply: true
+---
+
+- You are working on a simple iOS app called Meteoradar.
+- This app is showing a radar images as map overlay.
+- Always strive for technical excellence, clean code, and good architecture.
+- Always think about performance and battery efficiency.
+- Always think about network performance and data usage.
+- Always update cursor rules if necessary in folder .cursor/rules.
+- I am experienced developer but not familiar with SwiftUI, so please explain me key concepts.
+- Avoid using fallbacks and keeping legacy code.

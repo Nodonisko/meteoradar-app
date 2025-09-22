@@ -1,0 +1,25 @@
+---
+description: Meteoradar app specific rules and patterns
+globs: ["**/*.swift"]
+alwaysApply: true
+---
+
+## Meteoradar App Specific Rules
+
+### Radar Data Handling
+
+- **USE** `Constants.Radar` for all radar-related configuration
+- **USE** `NetworkService.shared` for all network operations
+- **CACHE** radar images when appropriate to reduce network usage
+
+### Location Services
+
+- **RESPECT** user privacy - only request location when needed
+- **IMPLEMENT** battery-efficient location tracking with appropriate filters
+- **USE** `Constants.Location` for location-related configuration
+
+### Services Architecture
+
+- **SEPARATE** concerns: LocationManager for location, RadarImageManager for radar data
+- **IMPLEMENT** singleton pattern for shared services (NetworkService)
+- **CENTRALIZE** all configuration in Constants.swift
