@@ -12,11 +12,12 @@ import UIKit
 struct MapViewWithOverlay: UIViewRepresentable {
     @Binding var region: MKCoordinateRegion
     @ObservedObject var radarImageManager: RadarImageManager
+    var userLocation: CLLocation?
     
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
         mapView.delegate = context.coordinator
-        mapView.showsUserLocation = true
+        mapView.showsUserLocation = false  // We'll handle user location manually
         mapView.userTrackingMode = .none
         mapView.setRegion(region, animated: false)
         
@@ -25,12 +26,18 @@ struct MapViewWithOverlay: UIViewRepresentable {
         context.coordinator.radarOverlay = radarOverlay
         mapView.addOverlay(radarOverlay)
         
+        // Create ONE user location annotation that we'll reuse forever
+        context.coordinator.setupUserLocationAnnotation(on: mapView)
+        
         return mapView
     }
     
     func updateUIView(_ mapView: MKMapView, context: Context) {        
         // Simply update the radar overlay's image - no removal/addition needed!
         context.coordinator.updateRadarImage(radarImageManager.radarSequence.currentImage)
+        
+        // Update user location annotation coordinate
+        context.coordinator.updateUserLocation(userLocation)
     }
     
     func makeCoordinator() -> Coordinator {
@@ -41,6 +48,7 @@ struct MapViewWithOverlay: UIViewRepresentable {
         var parent: MapViewWithOverlay
         var radarOverlay: RadarImageOverlay?
         var radarRenderer: RadarImageRenderer?
+        var userLocationAnnotation: MKPointAnnotation?
         
         init(_ parent: MapViewWithOverlay) {
             self.parent = parent
@@ -50,6 +58,7 @@ struct MapViewWithOverlay: UIViewRepresentable {
             // Clean up references to prevent retain cycles
             radarRenderer = nil
             radarOverlay = nil
+            userLocationAnnotation = nil
         }
         
         func updateRadarImage(_ newImage: UIImage?) {
@@ -58,6 +67,27 @@ struct MapViewWithOverlay: UIViewRepresentable {
             // Trigger a redraw of the renderer
             radarRenderer?.setNeedsDisplay()
         }
+        
+        func setupUserLocationAnnotation(on mapView: MKMapView) {
+            // Create ONE annotation that we'll reuse forever
+            let annotation = MKPointAnnotation()
+            annotation.title = "Your Location"
+            annotation.coordinate = CLLocationCoordinate2D(latitude: 0, longitude: 0) // Will be updated when we have location
+            mapView.addAnnotation(annotation)
+            userLocationAnnotation = annotation
+        }
+        
+        func updateUserLocation(_ location: CLLocation?) {
+            guard let annotation = userLocationAnnotation else { return }
+            
+            if let location = location {
+                // Just update coordinate - no removal/addition needed
+                annotation.coordinate = location.coordinate
+            }
+            // Note: We don't hide the annotation when location is nil
+            // It will just stay at the last known position
+        }
+        
         
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let radarOverlay = overlay as? RadarImageOverlay {
@@ -68,6 +98,54 @@ struct MapViewWithOverlay: UIViewRepresentable {
             return MKOverlayRenderer(overlay: overlay)
         }
         
+        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            // Custom view for our user location annotation
+            if annotation === userLocationAnnotation {
+                let identifier = "UserLocationView"
+                var annotationView = mapView.dequeueReusableAnnotationView(withIdentifier: identifier)
+                
+                if annotationView == nil {
+                    annotationView = MKAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+                    annotationView?.canShowCallout = false
+                    
+                    // Create custom blue dot image
+                    let dotSize: CGFloat = 20
+                    annotationView?.image = createUserLocationDotImage(size: dotSize)
+                } else {
+                    annotationView?.annotation = annotation
+                }
+                
+                return annotationView
+            }
+            
+            return nil
+        }
+        
+        // Create a perfect circular user location dot image
+        private func createUserLocationDotImage(size: CGFloat) -> UIImage {
+            let renderer = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
+            
+            return renderer.image { context in
+                let cgContext = context.cgContext
+                let rect = CGRect(x: 0, y: 0, width: size, height: size)
+                
+                // Draw shadow
+                cgContext.saveGState()
+                cgContext.setShadow(offset: CGSize(width: 0, height: 2), blur: 3, color: UIColor.black.withAlphaComponent(0.3).cgColor)
+                
+                // Draw white border circle
+                cgContext.setFillColor(UIColor.white.cgColor)
+                cgContext.fillEllipse(in: rect)
+                
+                cgContext.restoreGState()
+                
+                // Draw blue center circle
+                let innerRect = CGRect(x: 3, y: 3, width: size - 6, height: size - 6)
+                cgContext.setFillColor(UIColor.systemBlue.cgColor)
+                cgContext.fillEllipse(in: innerRect)
+            }
+        }
+
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             parent.region = mapView.region
         }

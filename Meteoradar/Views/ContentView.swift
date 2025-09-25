@@ -25,7 +25,7 @@ struct ContentView: View {
     
     var body: some View {
         ZStack {
-            MapViewWithOverlay(region: $region, radarImageManager: radarManager)
+            MapViewWithOverlay(region: $region, radarImageManager: radarManager, userLocation: locationManager.location)
                 .ignoresSafeArea()
             
             // Timestamp display in top left corner

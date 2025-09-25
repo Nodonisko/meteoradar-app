@@ -13,54 +13,170 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     private let locationManager = CLLocationManager()
     @Published var location: CLLocation?
     @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
+    @Published var isUpdatingLocation = false
     
     private var lastLocationUpdate: Date?
-    private let locationUpdateInterval: TimeInterval = Constants.Location.updateInterval
+    private var locationCompletionHandler: ((Result<CLLocation, Error>) -> Void)?
     
     override init() {
         super.init()
-        locationManager.delegate = self
-        locationManager.desiredAccuracy = kCLLocationAccuracyBest // Less accurate but more battery efficient
-        locationManager.distanceFilter = Constants.Location.distanceFilter
-        locationManager.requestWhenInUseAuthorization()
-        locationManager.startUpdatingLocation()
+        setupLocationManager()
     }
     
     deinit {
-        locationManager.stopUpdatingLocation()
-        locationManager.delegate = nil
+        stopLocationUpdates()
     }
+    
+    // MARK: - Setup
+    
+    private func setupLocationManager() {
+        locationManager.delegate = self
+        locationManager.desiredAccuracy = Constants.Location.desiredAccuracy
+        locationManager.distanceFilter = Constants.Location.distanceFilter
+        
+        // Request authorization and get initial location
+        locationManager.requestWhenInUseAuthorization()
+        
+        // Request initial location when manager is set up
+        // This will only execute once authorization is granted
+        if authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways {
+            getInitialLocation()
+        }
+    }
+    
+    // MARK: - Public Methods
+    
+    /// Requests a one-time location update with completion handler
+    func requestLocationUpdate(completion: ((Result<CLLocation, Error>) -> Void)? = nil) {
+        guard authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways else {
+            completion?(.failure(LocationError.notAuthorized))
+            return
+        }
+        
+        guard !isUpdatingLocation else {
+            completion?(.failure(LocationError.updateInProgress))
+            return
+        }
+        
+        locationCompletionHandler = completion
+        isUpdatingLocation = true
+        
+        // Use requestLocation for one-time updates - more energy efficient
+        locationManager.requestLocation()
+        
+        print("Requesting one-time location update...")
+    }
+    
+    /// Gets initial location when app launches
+    func getInitialLocation() {
+        requestLocationUpdate { [weak self] result in
+            switch result {
+            case .success(let location):
+                print("Initial location obtained: \(location.coordinate.latitude), \(location.coordinate.longitude)")
+                // Start monitoring significant location changes after getting initial location
+                self?.startSignificantLocationMonitoring()
+            case .failure(let error):
+                print("Failed to get initial location: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    /// Starts monitoring significant location changes (ultra low energy)
+    func startSignificantLocationMonitoring() {
+        guard authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways else {
+            print("Cannot start significant location monitoring - not authorized")
+            return
+        }
+        
+        guard CLLocationManager.significantLocationChangeMonitoringAvailable() else {
+            print("Significant location change monitoring not available on this device")
+            return
+        }
+        
+        locationManager.startMonitoringSignificantLocationChanges()
+        print("Started monitoring significant location changes (ultra low energy mode)")
+    }
+    
+    /// Stops monitoring significant location changes
+    func stopSignificantLocationMonitoring() {
+        locationManager.stopMonitoringSignificantLocationChanges()
+        print("Stopped monitoring significant location changes")
+    }
+    
+    /// Stops any ongoing location updates
+    func stopLocationUpdates() {
+        locationManager.stopUpdatingLocation()
+        stopSignificantLocationMonitoring()
+        locationManager.delegate = nil
+        isUpdatingLocation = false
+        locationCompletionHandler = nil
+    }
+    
+    /// Checks if enough time has passed since last update to warrant a new one
+    var shouldUpdateLocation: Bool {
+        guard let lastUpdate = lastLocationUpdate else { return true }
+        let timeSinceLastUpdate = Date().timeIntervalSince(lastUpdate)
+        return timeSinceLastUpdate >= Constants.Location.updateInterval
+    }
+    
+    // MARK: - CLLocationManagerDelegate
     
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let newLocation = locations.last else { return }
         
-        let now = Date()
-        
-        // Check if this is the first update or if 5 minutes have passed
-        if let lastUpdate = lastLocationUpdate {
-            let timeSinceLastUpdate = now.timeIntervalSince(lastUpdate)
-            if timeSinceLastUpdate < locationUpdateInterval {
-                return // Skip this update - not enough time has passed
-            }
-        }
-        
         // Update the location and timestamp
         location = newLocation
-        lastLocationUpdate = now
+        lastLocationUpdate = Date()
+        isUpdatingLocation = false
+        
+        // Call completion handler if one exists
+        locationCompletionHandler?(.success(newLocation))
+        locationCompletionHandler = nil
         
         print("Location updated: \(newLocation.coordinate.latitude), \(newLocation.coordinate.longitude)")
     }
     
-    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
-        authorizationStatus = status
-        if status == .authorizedWhenInUse || status == .authorizedAlways {
-            locationManager.startUpdatingLocation()
-        }
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        isUpdatingLocation = false
+        
+        // Call completion handler with error if one exists
+        locationCompletionHandler?(.failure(error))
+        locationCompletionHandler = nil
+        
+        print("Location update failed: \(error.localizedDescription)")
     }
     
-    // Method to manually request a location update (useful for user-triggered updates)
-    func requestLocationUpdate() {
-        lastLocationUpdate = nil // Reset the timer to allow immediate update
-        locationManager.requestLocation()
+    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+        authorizationStatus = status
+        
+        switch status {
+        case .authorizedWhenInUse, .authorizedAlways:
+            print("Location authorization granted")
+            // Get initial location as soon as authorization is granted
+            getInitialLocation()
+        case .denied, .restricted:
+            print("Location authorization denied")
+            location = nil
+        case .notDetermined:
+            print("Location authorization not determined")
+        @unknown default:
+            print("Unknown location authorization status")
+        }
+    }
+}
+
+// MARK: - Custom Errors
+
+enum LocationError: LocalizedError {
+    case notAuthorized
+    case updateInProgress
+    
+    var errorDescription: String? {
+        switch self {
+        case .notAuthorized:
+            return "Location access not authorized"
+        case .updateInProgress:
+            return "Location update already in progress"
+        }
     }
 }

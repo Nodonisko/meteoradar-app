@@ -1,0 +1,320 @@
+{
+  "fill" : {
+    "automatic-gradient" : "extended-srgb:0.00000,0.47843,1.00000,1.00000"
+  },
+  "groups" : [
+    {
+      "blend-mode" : "normal",
+      "layers" : [
+        {
+          "fill" : {
+            "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
+          },
+          "image-name" : "9_raindrop.svg",
+          "name" : "9_raindrop",
+          "opacity" : 0.85,
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -89.1875,
+              371
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
+          },
+          "image-name" : "8_raindrop.svg",
+          "name" : "8_raindrop",
+          "opacity-specializations" : [
+            {
+              "value" : 0.85
+            },
+            {
+              "appearance" : "tinted",
+              "value" : 1
+            }
+          ],
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -238.8671875,
+              370
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
+          },
+          "image-name" : "7_raindrop.svg",
+          "name" : "7_raindrop",
+          "opacity-specializations" : [
+            {
+              "value" : 0.85
+            },
+            {
+              "appearance" : "tinted",
+              "value" : 1
+            }
+          ],
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              1.390625,
+              228
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
+          },
+          "image-name" : "6_raindrop.svg",
+          "name" : "6_raindrop",
+          "opacity-specializations" : [
+            {
+              "value" : 0.85
+            },
+            {
+              "appearance" : "tinted",
+              "value" : 1
+            }
+          ],
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -139.703125,
+              228.046875
+            ]
+          }
+        },
+        {
+          "fill" : {
+            "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
+          },
+          "glass-specializations" : [
+            {
+              "value" : true
+            },
+            {
+              "appearance" : "tinted",
+              "value" : true
+            }
+          ],
+          "image-name" : "5_raindrop.svg",
+          "name" : "5_raindrop",
+          "opacity-specializations" : [
+            {
+              "value" : 0.85
+            },
+            {
+              "appearance" : "tinted",
+              "value" : 1
+            }
+          ],
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -284.328125,
+              228
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "specular" : true,
+      "translucency-specializations" : [
+        {
+          "value" : {
+            "enabled" : true,
+            "value" : 0.5
+          }
+        },
+        {
+          "appearance" : "dark",
+          "value" : {
+            "enabled" : true,
+            "value" : 0
+          }
+        }
+      ]
+    },
+    {
+      "blur-material-specializations" : [
+        {
+          "value" : 0.5
+        },
+        {
+          "appearance" : "dark",
+          "value" : 0.5
+        }
+      ],
+      "hidden" : false,
+      "layers" : [
+        {
+          "fill-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : {
+                "solid" : "extended-gray:0.84433,1.00000"
+              }
+            }
+          ],
+          "hidden" : false,
+          "image-name" : "4_cloud.svg",
+          "name" : "4_cloud",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -106.0390625,
+              -46.609375
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "blur-material-specializations" : [
+        {
+          "value" : null
+        },
+        {
+          "appearance" : "dark",
+          "value" : null
+        }
+      ],
+      "hidden" : false,
+      "layers" : [
+        {
+          "image-name" : "3_radar_line.svg",
+          "name" : "3_radar_line",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              175.41070935826676,
+              -166.8789205846079
+            ]
+          }
+        },
+        {
+          "blend-mode-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : "normal"
+            }
+          ],
+          "glass" : true,
+          "image-name" : "2_radar2.svg",
+          "name" : "2_radar2",
+          "opacity-specializations" : [
+            {
+              "appearance" : "tinted",
+              "value" : 0.6
+            }
+          ],
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "glass" : true,
+          "image-name" : "1_radar1.svg",
+          "name" : "1_radar1",
+          "opacity-specializations" : [
+            {
+              "value" : 1
+            },
+            {
+              "appearance" : "dark",
+              "value" : 0.8
+            },
+            {
+              "appearance" : "tinted",
+              "value" : 0.6
+            }
+          ]
+        }
+      ],
+      "lighting" : "individual",
+      "shadow-specializations" : [
+        {
+          "value" : {
+            "kind" : "neutral",
+            "opacity" : 0.5
+          }
+        },
+        {
+          "appearance" : "dark",
+          "value" : {
+            "kind" : "layer-color",
+            "opacity" : 0.5
+          }
+        }
+      ],
+      "specular" : true,
+      "translucency-specializations" : [
+        {
+          "value" : {
+            "enabled" : true,
+            "value" : 0.1
+          }
+        },
+        {
+          "appearance" : "dark",
+          "value" : {
+            "enabled" : true,
+            "value" : 0.5
+          }
+        }
+      ]
+    },
+    {
+      "blend-mode" : "normal",
+      "layers" : [
+        {
+          "glass" : false,
+          "image-name" : "radar_shadow-3.svg",
+          "name" : "radar_shadow-3",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -4.778844151908922,
+              -244.3993635706068
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}

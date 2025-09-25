@@ -12,3 +12,4 @@ alwaysApply: true
 - Always update cursor rules if necessary in folder .cursor/rules.
 - I am experienced developer but not familiar with SwiftUI, so please explain me key concepts.
 - Avoid using fallbacks and keeping legacy code.
+- Use modern SwiftUI patterns, we support iOS 16 and newer.

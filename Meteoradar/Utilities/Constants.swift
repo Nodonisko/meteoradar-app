@@ -14,7 +14,10 @@ struct Constants {
     // MARK: - Radar Configuration
     struct Radar {
         // Base URL pattern for radar images (timestamp will be inserted)
-        static let baseURL = "http://localhost:8080/radar_%@_overlay2x.png"
+        static let baseURL = "http://192.168.88.149:8080/radar_%@_overlay2x.png"
+        
+        // URL parsing pattern - matches any datetime string (YYYYMMDD_HHMM) in the URL
+        static let filenamePattern = #"(\d{8}_\d{4})"#
         
         // Animation configuration
         static let imageCount = 10 // Number of radar images to fetch and animate
@@ -59,8 +62,21 @@ struct Constants {
     
     // MARK: - Location Configuration
     struct Location {
-        static let updateInterval: TimeInterval = 300 // 5 minutes
-        static let distanceFilter: CLLocationDistance = 150 // meters
+        // Minimum time between location updates (5 minutes)
+        static let updateInterval: TimeInterval = 300
+        
+        // Distance filter for location updates (500m - larger for better battery life)
+        static let distanceFilter: CLLocationDistance = 500
+        
+        // Desired accuracy - balanced for weather radar use case
+        // Using kCLLocationAccuracyHundredMeters for better battery life
+        // This is sufficient accuracy for weather radar positioning
+        static let desiredAccuracy: CLLocationAccuracy = kCLLocationAccuracyBest
+        
+        // Map span when centering on user location
         static let userLocationSpan = MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
+        
+        // Timeout for location requests (30 seconds)
+        static let locationTimeout: TimeInterval = 30
     }
 }

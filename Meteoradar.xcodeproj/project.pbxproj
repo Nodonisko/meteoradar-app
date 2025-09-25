@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		C3F9F6132E81601000951F5D /* RainRadar.icon in Resources */ = {isa = PBXBuildFile; fileRef = C3F9F6122E81601000951F5D /* RainRadar.icon */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		C3B298FC2E7722FD005DD018 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,6 +31,7 @@
 		C3B298E92E7722FB005DD018 /* Meteoradar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Meteoradar.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C3B298FB2E7722FD005DD018 /* MeteoradarTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MeteoradarTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C3B299052E7722FD005DD018 /* MeteoradarUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MeteoradarUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C3F9F6122E81601000951F5D /* RainRadar.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = RainRadar.icon; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -79,6 +84,7 @@
 				C3B298FE2E7722FD005DD018 /* MeteoradarTests */,
 				C3B299082E7722FD005DD018 /* MeteoradarUITests */,
 				C3B298EA2E7722FB005DD018 /* Products */,
+				C3F9F6122E81601000951F5D /* RainRadar.icon */,
 			);
 			sourceTree = "<group>";
 		};
@@ -171,7 +177,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1630;
-				LastUpgradeCheck = 1630;
+				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					C3B298E82E7722FB005DD018 = {
 						CreatedOnToolsVersion = 16.3;
@@ -212,6 +218,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C3F9F6132E81601000951F5D /* RainRadar.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -328,6 +335,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -385,6 +393,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -393,7 +402,7 @@
 		C3B299102E7722FD005DD018 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = RainRadar;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_IDENTITY = "Apple Development";
@@ -402,6 +411,7 @@
 				DEVELOPMENT_TEAM = 45BPJL5U4H;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.weather";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "$(MARKETING_VERSION)";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -425,7 +435,7 @@
 		C3B299112E7722FD005DD018 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = RainRadar;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_IDENTITY = "Apple Development";
@@ -434,6 +444,7 @@
 				DEVELOPMENT_TEAM = 45BPJL5U4H;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.weather";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "$(MARKETING_VERSION)";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

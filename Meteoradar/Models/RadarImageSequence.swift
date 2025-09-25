@@ -231,7 +231,7 @@ class RadarImageSequence: ObservableObject {
         // Return first image that needs loading (newest first)
         return images.first { image in
             switch image.state {
-            case .pending, .failed where image.shouldRetry:
+            case .pending where image.shouldRetry, .failed where image.shouldRetry:
                 return true
             default:
                 return false

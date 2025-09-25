@@ -19,7 +19,6 @@ class RadarImageManager: ObservableObject {
     private var animationTimer: Timer?
     private var updateTimer: Timer?
     private var retryTimer: Timer?
-    private var pendingFetches: Set<String> = []
     private var cancellables = Set<AnyCancellable>()
     
     
@@ -31,6 +30,7 @@ class RadarImageManager: ObservableObject {
     
     deinit {
         stopAllTimers()
+        networkService.cancelAllRadarRequests()
     }
     
     // MARK: - Public Methods
@@ -65,6 +65,15 @@ class RadarImageManager: ObservableObject {
     
     func refreshRadarImages() {
         fetchLatestRadarImages()
+    }
+    
+    func cancelAllFetches() {
+        networkService.cancelAllRadarRequests()
+        // Reset any loading placeholders to pending state
+        for image in radarSequence.images where image.isLoading {
+            image.state = .pending
+            image.startTime = nil
+        }
     }
     
     // MARK: - Private Methods
@@ -117,73 +126,79 @@ class RadarImageManager: ObservableObject {
             return
         }
         
-        let fetchGroup = DispatchGroup()
-        var fetchErrors: [Error] = []
-        var successCount = 0
-        
+        // Mark placeholders as loading
         for timestamp in timestampsToFetch {
-            let timestampString = timestamp.radarTimestampString
-            let urlString = String(format: Constants.Radar.baseURL, timestampString)
-            
-            // Skip if already fetching this URL
-            guard !pendingFetches.contains(urlString) else { continue }
-            
-            // Find the placeholder and mark it as loading
             if let placeholder = radarSequence.images.first(where: { 
                 Calendar.current.isDate($0.timestamp, equalTo: timestamp, toGranularity: .minute) 
             }) {
                 placeholder.state = .loading
                 placeholder.startTime = Date()
             }
-            
-            pendingFetches.insert(urlString)
-
-            fetchGroup.enter()
-            
-            networkService.fetchRadarImage(from: urlString) { [weak self] result in
-                defer {
-                    fetchGroup.leave()
-                    self?.pendingFetches.remove(urlString)
-                }
+        }
+        
+        // Use simplified radar-aware network service
+        networkService.fetchRadarSequence(
+            timestamps: timestampsToFetch,
+            strategy: .sequential
+        )
+        .sink { [weak self] radarResults in
+            self?.processRadarResults(radarResults, wasOnNewest: wasOnNewest)
+        }
+        .store(in: &cancellables)
+    }
+    
+    /// Process radar results and update placeholders
+    private func processRadarResults(_ radarResults: [RadarImageResult], wasOnNewest: Bool) {
+        var successCount = 0
+        var fetchErrors: [Error] = []
+        
+        for radarResult in radarResults {
+            // Find the placeholder to update
+            if let placeholder = radarSequence.images.first(where: { 
+                Calendar.current.isDate($0.timestamp, equalTo: radarResult.timestamp, toGranularity: .minute) 
+            }) {
+                placeholder.endTime = Date()
                 
-                DispatchQueue.main.async {
-                    // Find the placeholder to update
-                    guard let placeholder = self?.radarSequence.images.first(where: { 
-                        Calendar.current.isDate($0.timestamp, equalTo: timestamp, toGranularity: .minute) 
-                    }) else { return }
+                switch radarResult.result {
+                case .success(let image):
+                    radarSequence.updateImage(placeholder, with: image, fromCache: radarResult.wasFromCache)
+                    successCount += 1
                     
-                    placeholder.endTime = Date()
-                    
-                    switch result {
-                    case .success(let image):
-                        self?.radarSequence.updateImage(placeholder, with: image, fromCache: false)
-                        successCount += 1
-                        
-                        // If user was on newest before fetching, jump to newest available image
-                        if wasOnNewest {
-                            self?.radarSequence.currentImageIndex = 0
-                        }
-                    case .failure(let error):
-                        placeholder.state = .failed(error, attemptCount: placeholder.attemptCount + 1)
-                        placeholder.lastError = error
-                        fetchErrors.append(error)
-                        print("Failed to fetch radar image for \(timestampString): \(error.localizedDescription)")
+                    // If user was on newest before fetching, jump to newest available image
+                    if wasOnNewest {
+                        radarSequence.currentImageIndex = 0
                     }
+                    
+                case .failure(let error):
+                    handleImageFetchError(error, placeholder: placeholder, timestamp: radarResult.timestamp)
+                    fetchErrors.append(error)
                 }
             }
         }
         
-        fetchGroup.notify(queue: .main) { [weak self] in
-            self?.isLoading = false
-            self?.lastUpdateTime = Date()
-            
-            if successCount > 0 {
-                self?.errorMessage = nil
-            } else if !fetchErrors.isEmpty {
-                self?.errorMessage = "Failed to fetch radar images"
-                // If we couldn't fetch the latest images, retry in a bit
-                self?.scheduleRetry()
-            }
+        // Update loading state and handle errors
+        isLoading = false
+        lastUpdateTime = Date()
+        
+        if successCount > 0 {
+            errorMessage = nil
+        } else if !fetchErrors.isEmpty {
+            errorMessage = "Failed to fetch radar images"
+            scheduleRetry()
+        }
+    }
+    
+    /// Handle individual image fetch errors with appropriate state updates
+    private func handleImageFetchError(_ error: Error, placeholder: RadarImageData, timestamp: Date) {
+        // Don't treat cancellation as a real error for UI purposes
+        if let urlError = error as? URLError, urlError.code == .cancelled {
+            placeholder.state = .pending
+            placeholder.startTime = nil
+            print("Radar image request cancelled for \(timestamp.radarTimestampString) - reset to pending")
+        } else {
+            placeholder.state = .failed(error, attemptCount: placeholder.attemptCount + 1)
+            placeholder.lastError = error
+            print("Failed to fetch radar image for \(timestamp.radarTimestampString): \(error.localizedDescription)")
         }
     }
     

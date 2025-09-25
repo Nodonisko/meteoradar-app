@@ -58,6 +58,11 @@ extension Date {
         return formatter.date(from: radarTimestamp)
     }
     
+    /// Creates a date from a radar timestamp string (YYYYMMDD_HHMM) - alternative method name
+    static func fromRadarTimestampString(_ timestamp: String) -> Date? {
+        return from(radarTimestamp: timestamp)
+    }
+    
     /// Returns an array of radar timestamps going back in time
     /// - Parameter count: Number of timestamps to generate
     /// - Returns: Array of dates in descending chronological order (newest first)
