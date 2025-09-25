@@ -37,8 +37,7 @@ class NetworkService {
     private init() {
         // Configure URLSession for better performance
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 30
-        config.timeoutIntervalForResource = 60
+        config.timeoutIntervalForRequest = Constants.Network.radarRequestTimeout
         self.session = URLSession(configuration: config)
     }
     

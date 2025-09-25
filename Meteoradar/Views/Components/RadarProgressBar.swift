@@ -145,7 +145,7 @@ struct RadarProgressBar: View {
 
 // Separate component for each progress bar box to avoid race conditions
 struct ProgressBarBox: View {
-    let imageData: RadarImageData
+    @ObservedObject var imageData: RadarImageData
     @ObservedObject var radarSequence: RadarImageSequence
     @ObservedObject var radarImageManager: RadarImageManager
     

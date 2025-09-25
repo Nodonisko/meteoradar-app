@@ -27,7 +27,7 @@ struct Constants {
         static let radarImageInterval: TimeInterval = 300 // New radar image every 5 minutes
         
         // Sequential loading configuration
-        static let maxRetryAttempts = 1 // Try once more if image fails to load
+        static let maxRetryAttempts = 2 // Initial attempt + one retry if image fails to load
         static let retryDelay: TimeInterval = 1.0 // Brief delay between retries
         
         // Cache configuration
@@ -58,6 +58,12 @@ struct Constants {
         static let artificialLoadingDelay: TimeInterval = 2.0 // seconds
         static let simulateRandomFailures = false // Set to true to randomly fail some requests
         static let failureRate: Double = 0.3 // 20% of requests will fail when enabled
+    }
+    
+    // MARK: - Network Configuration
+    struct Network {
+        // Timeout for individual radar image requests (Edge network ~100 Kbps → 20 KB ≈ 2 seconds, but we allow headroom)
+        static let radarRequestTimeout: TimeInterval = 25
     }
     
     // MARK: - Location Configuration

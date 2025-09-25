@@ -97,10 +97,12 @@ class RadarImageData: ObservableObject {
     }
     
     var shouldRetry: Bool {
-        if case .failed(_, let count) = state {
-            return count < Constants.Radar.maxRetryAttempts
+        switch state {
+        case .failed, .pending, .retrying:
+            return attemptCount < Constants.Radar.maxRetryAttempts
+        default:
+            return false
         }
-        return false
     }
     
     // Cache-specific methods (ready for future implementation)
@@ -114,6 +116,7 @@ class RadarImageData: ObservableObject {
         imageSource = .network
         isCached = false // Will be cached after successful load
     }
+
 }
 
 class RadarImageSequence: ObservableObject {
@@ -254,6 +257,8 @@ class RadarImageSequence: ObservableObject {
         imageData.image = image
         imageData.state = .success
         imageData.endTime = Date()
+        imageData.attemptCount = 0
+        imageData.lastError = nil
         
         if fromCache {
             imageData.markAsCached()
