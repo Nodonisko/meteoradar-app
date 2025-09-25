@@ -14,6 +14,7 @@ class RadarImageManager: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var lastUpdateTime: Date?
+    @Published private(set) var displayedTimestamp: Date?
     
     private let networkService = NetworkService.shared
     private var animationTimer: Timer?
@@ -37,21 +38,28 @@ class RadarImageManager: ObservableObject {
     
     func startAnimation() {
         guard !radarSequence.images.isEmpty else { return }
-        
+
+        let loadedFrames = radarSequence.loadedImages
+        guard loadedFrames.count > 1 else {
+            radarSequence.isAnimating = false
+            return
+        }
+
         radarSequence.isAnimating = true
-        
+
+        // Reset any existing timer before starting a new one
+        animationTimer?.invalidate()
+
         // If we're on the newest image (index 0), immediately advance to start the sequence
         if radarSequence.currentImageIndex == 0 {
-            radarSequence.nextFrame()
+            advanceSequence(animated: false)
         }
-        
+
         animationTimer = Timer.scheduledTimer(withTimeInterval: Constants.Radar.animationInterval, repeats: true) { [weak self] _ in
             guard let self = self else { return }
-            
-            self.radarSequence.nextFrame()
-            
-            // Stop animation when we reach the newest image (index 0)
-            if self.radarSequence.currentImageIndex == 0 {
+
+            let shouldStop = self.advanceSequence(animated: true)
+            if shouldStop {
                 self.stopAnimation()
             }
         }
@@ -217,5 +225,51 @@ class RadarImageManager: ObservableObject {
         animationTimer = nil
         updateTimer = nil
         retryTimer = nil
+    }
+
+    // MARK: - Rendering Coordination
+
+    func overlayDidUpdate(imageTimestamp: Date?) {
+        setDisplayedTimestamp(imageTimestamp, deferred: true)
+    }
+
+    func userSelectedImage(timestamp: Date?) {
+        // Ensure immediate UI update for taps, while keeping SwiftUI warnings away
+        setDisplayedTimestamp(timestamp, deferred: false)
+    }
+
+    @discardableResult
+    private func advanceSequence(animated: Bool) -> Bool {
+        let availableImages = radarSequence.loadedImages
+        guard !availableImages.isEmpty else { return true }
+
+        if availableImages.count == 1 {
+            radarSequence.currentImageIndex = 0
+            return true
+        }
+
+        let previousIndex = radarSequence.currentImageIndex
+        radarSequence.nextFrame()
+
+        guard animated else { return false }
+
+        return radarSequence.currentImageIndex == 0 && previousIndex != 0
+    }
+
+    private func setDisplayedTimestamp(_ timestamp: Date?, deferred: Bool) {
+        guard displayedTimestamp != timestamp else { return }
+
+        let updateBlock: () -> Void = { [weak self] in
+            guard let self = self, self.displayedTimestamp != timestamp else { return }
+            self.displayedTimestamp = timestamp
+        }
+
+        if deferred {
+            DispatchQueue.main.async(execute: updateBlock)
+        } else if Thread.isMainThread {
+            updateBlock()
+        } else {
+            DispatchQueue.main.async(execute: updateBlock)
+        }
     }
 }

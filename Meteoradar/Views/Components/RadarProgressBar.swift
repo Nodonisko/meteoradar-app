@@ -39,7 +39,7 @@ extension RadarProgressBar {
 
 struct RadarProgressBar: View {
     @ObservedObject var radarSequence: RadarImageSequence
-    let radarImageManager: RadarImageManager
+    @ObservedObject var radarImageManager: RadarImageManager
     
     
     // Create stable snapshot to avoid race conditions (cached)
@@ -114,8 +114,8 @@ struct RadarProgressBar: View {
         guard imageData.state == .success else { return }
         
         // Early return if this image is already the current one (using existing state!)
-        if let currentTimestamp = radarSequence.currentTimestamp,
-           Calendar.current.isDate(imageData.timestamp, equalTo: currentTimestamp, toGranularity: .minute) {
+        if let displayedTimestamp = radarImageManager.displayedTimestamp,
+           Calendar.current.isDate(imageData.timestamp, equalTo: displayedTimestamp, toGranularity: .minute) {
             return // Already selected - no work needed
         }
         
@@ -138,6 +138,7 @@ struct RadarProgressBar: View {
             Calendar.current.isDate(loadedImage.timestamp, equalTo: imageData.timestamp, toGranularity: .minute)
         }) {
             radarSequence.currentImageIndex = index
+            radarImageManager.userSelectedImage(timestamp: imageData.timestamp)
         }
     }
 }
@@ -146,12 +147,12 @@ struct RadarProgressBar: View {
 struct ProgressBarBox: View {
     let imageData: RadarImageData
     @ObservedObject var radarSequence: RadarImageSequence
-    let radarImageManager: RadarImageManager
+    @ObservedObject var radarImageManager: RadarImageManager
     
     // Capture state at render time to avoid mid-render changes
     private var isCurrentFrame: Bool {
-        guard let currentTimestamp = radarSequence.currentTimestamp else { return false }
-        return Calendar.current.isDate(imageData.timestamp, equalTo: currentTimestamp, toGranularity: .minute)
+        guard let displayedTimestamp = radarImageManager.displayedTimestamp else { return false }
+        return Calendar.current.isDate(imageData.timestamp, equalTo: displayedTimestamp, toGranularity: .minute)
     }
     
     private var isEnabled: Bool {
@@ -172,6 +173,7 @@ struct ProgressBarBox: View {
             .onTapGesture {
                 if isEnabled {
                     print("Tap gesture triggered for: \(imageData.timestamp.radarTimestampString)")
+                    radarImageManager.userSelectedImage(timestamp: imageData.timestamp)
                     handleSelection()
                 } else {
                     print("Tap ignored - button not enabled")

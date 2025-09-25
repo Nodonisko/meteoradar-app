@@ -13,20 +13,23 @@ class RadarImageOverlay: NSObject, MKOverlay {
     let coordinate: CLLocationCoordinate2D
     let boundingMapRect: MKMapRect
     var image: UIImage?  // Make this mutable so we can update it
+    private(set) var timestamp: Date?
     
-    init(coordinate: CLLocationCoordinate2D, boundingMapRect: MKMapRect, image: UIImage?) {
+    init(coordinate: CLLocationCoordinate2D, boundingMapRect: MKMapRect, image: UIImage?, timestamp: Date?) {
         self.coordinate = coordinate
         self.boundingMapRect = boundingMapRect
         self.image = image
+        self.timestamp = timestamp
         super.init()
     }
     
-    func updateImage(_ newImage: UIImage?) {
+    func updateImage(_ newImage: UIImage?, timestamp: Date?) {
         self.image = newImage
+        self.timestamp = timestamp
     }
     
     // Define the radar coverage area with exact bounds
-    static func createCzechRadarOverlay(image: UIImage?) -> RadarImageOverlay {
+    static func createCzechRadarOverlay(image: UIImage?, timestamp: Date?) -> RadarImageOverlay {
         // Exact radar image bounds
         let northEast = Constants.Radar.northEast
         let southWest = Constants.Radar.southWest
@@ -53,7 +56,8 @@ class RadarImageOverlay: NSObject, MKOverlay {
         return RadarImageOverlay(
             coordinate: centerCoordinate,
             boundingMapRect: mapRect,
-            image: image
+            image: image,
+            timestamp: timestamp
         )
     }
 }

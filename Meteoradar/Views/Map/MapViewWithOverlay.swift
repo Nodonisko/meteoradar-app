@@ -22,7 +22,10 @@ struct MapViewWithOverlay: UIViewRepresentable {
         mapView.setRegion(region, animated: false)
         
         // Create ONE radar overlay that we'll keep updating
-        let radarOverlay = RadarImageOverlay.createCzechRadarOverlay(image: radarImageManager.radarSequence.currentImage)
+        let radarOverlay = RadarImageOverlay.createCzechRadarOverlay(
+            image: radarImageManager.radarSequence.currentImage,
+            timestamp: radarImageManager.radarSequence.currentTimestamp
+        )
         context.coordinator.radarOverlay = radarOverlay
         mapView.addOverlay(radarOverlay)
         
@@ -34,7 +37,11 @@ struct MapViewWithOverlay: UIViewRepresentable {
     
     func updateUIView(_ mapView: MKMapView, context: Context) {        
         // Simply update the radar overlay's image - no removal/addition needed!
-        context.coordinator.updateRadarImage(radarImageManager.radarSequence.currentImage)
+        context.coordinator.updateRadarImage(
+            radarImageManager: radarImageManager,
+            currentImage: radarImageManager.radarSequence.currentImage,
+            timestamp: radarImageManager.radarSequence.currentTimestamp
+        )
         
         // Update user location annotation coordinate
         context.coordinator.updateUserLocation(userLocation)
@@ -61,9 +68,12 @@ struct MapViewWithOverlay: UIViewRepresentable {
             userLocationAnnotation = nil
         }
         
-        func updateRadarImage(_ newImage: UIImage?) {
+        func updateRadarImage(radarImageManager: RadarImageManager, currentImage: UIImage?, timestamp: Date?) {
             // Simply update the image in the existing overlay
-            radarOverlay?.updateImage(newImage)
+            radarOverlay?.updateImage(currentImage, timestamp: timestamp)
+            radarRenderer?.onRenderCompleted = { renderedTimestamp in
+                radarImageManager.overlayDidUpdate(imageTimestamp: renderedTimestamp)
+            }
             // Trigger a redraw of the renderer
             radarRenderer?.setNeedsDisplay()
         }
@@ -92,6 +102,9 @@ struct MapViewWithOverlay: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let radarOverlay = overlay as? RadarImageOverlay {
                 let renderer = RadarImageRenderer(overlay: radarOverlay)
+                renderer.onRenderCompleted = { [weak self] renderedTimestamp in
+                    self?.parent.radarImageManager.overlayDidUpdate(imageTimestamp: renderedTimestamp)
+                }
                 self.radarRenderer = renderer  // Keep a reference
                 return renderer
             }
