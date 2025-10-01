@@ -46,7 +46,7 @@ struct RadarProgressBar: View {
     private var stableImages: [(id: String, data: RadarImageData)] {
         radarSequence.images
             .sorted { $0.timestamp < $1.timestamp }
-            .map { (id: $0.timestamp.radarTimestampString, data: $0) }
+            .map { (id: $0.cacheKey, data: $0) }
     }
     
     var body: some View {
@@ -135,7 +135,7 @@ struct RadarProgressBar: View {
         // Find and select the image efficiently
         let loadedImages = radarSequence.loadedImages
         if let index = loadedImages.firstIndex(where: { loadedImage in
-            Calendar.current.isDate(loadedImage.timestamp, equalTo: imageData.timestamp, toGranularity: .minute)
+            loadedImage.cacheKey == imageData.cacheKey
         }) {
             radarSequence.currentImageIndex = index
             radarImageManager.userSelectedImage(timestamp: imageData.timestamp)
@@ -161,11 +161,11 @@ struct ProgressBarBox: View {
     
     var body: some View {
         RoundedRectangle(cornerRadius: 2)
-            .fill(isCurrentFrame ? borderColor : Color.clear)
+            .fill(fillColor)
             .frame(height: RadarProgressBar.Constants.boxHeight)
             .overlay(
                 RoundedRectangle(cornerRadius: 2)
-                    .stroke(borderColor, lineWidth: 1.0)
+                    .stroke(strokeColor, lineWidth: 1.0)
             )
             .opacity(opacity)
             .scaleEffect(isCurrentFrame ? 1.1 : 1.0)
@@ -181,9 +181,9 @@ struct ProgressBarBox: View {
             }
     }
     
-    private var borderColor: Color {
+    private var strokeColor: Color {
         switch imageData.state {
-        case .success: return .blue
+        case .success: return baseColor
         case .loading, .retrying: return .yellow
         case .failed: return .red
         case .pending: return .gray
@@ -191,9 +191,28 @@ struct ProgressBarBox: View {
         }
     }
     
+    private var baseColor: Color {
+        switch imageData.kind {
+        case .observed:
+            return .blue
+        case .forecast:
+            return Color.cyan
+        }
+    }
+    
+    private var fillColor: Color {
+        guard case .success = imageData.state else {
+            return isCurrentFrame ? strokeColor.opacity(0.25) : Color.clear
+        }
+        if imageData.kind.isForecast {
+            return isCurrentFrame ? Color.cyan.opacity(0.45) : Color.cyan.opacity(0.22)
+        }
+        return isCurrentFrame ? Color.blue.opacity(0.45) : Color.blue.opacity(0.15)
+    }
+    
     private var opacity: Double {
         switch imageData.state {
-        case .success: return 1.0
+        case .success: return imageData.kind.isForecast ? 0.85 : 1.0
         case .loading, .retrying: return 0.8
         case .failed: return 0.7
         case .pending: return 0.4

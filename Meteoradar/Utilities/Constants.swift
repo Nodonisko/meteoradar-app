@@ -14,7 +14,8 @@ struct Constants {
     // MARK: - Radar Configuration
     struct Radar {
         // Base URL pattern for radar images (timestamp will be inserted)
-        static let baseURL = "http://192.168.88.149:8080/radar_%@_overlay2x.png"
+        static let baseURL = "https://radar.danielsuchy.cz/output/radar_%@_overlay2x.png"
+        static let forecastBaseURL = "https://radar.danielsuchy.cz/output_forecast/radar_%@_forecast_fct%d_overlay.png"
         
         // URL parsing pattern - matches any datetime string (YYYYMMDD_HHMM) in the URL
         static let filenamePattern = #"(\d{8}_\d{4})"#
@@ -27,8 +28,15 @@ struct Constants {
         static let radarImageInterval: TimeInterval = 300 // New radar image every 5 minutes
         
         // Sequential loading configuration
-        static let maxRetryAttempts = 2 // Initial attempt + one retry if image fails to load
-        static let retryDelay: TimeInterval = 1.0 // Brief delay between retries
+        static let maxRetryAttempts = 5 // Observed frames: initial attempt + one retry
+        static let retryDelay: TimeInterval = 5.0 // Observed frame retry delay
+        static let forecastMaxRetryAttempts = 10 // Forecast frames: allow retries for roughly one minute
+        static let forecastRetryDelay: TimeInterval = 10.0 // Forecast frames wait longer before retry
+        
+        // Forecast configuration
+        static let forecastHorizonMinutes: Int = 60 // Forecast range into future
+        static let forecastIntervalMinutes: Int = 10 // Step between forecast frames
+        static let forecastOverlayAlpha: CGFloat = 0.5
         
         // Cache configuration
         static let cacheEnabled = true // Enable file system caching
@@ -49,6 +57,15 @@ struct Constants {
         )
         
         static let overlayAlpha: CGFloat = 0.7
+        
+        static func forecastOffsets() -> [Int] {
+            guard forecastHorizonMinutes > 0, forecastIntervalMinutes > 0 else { return [] }
+            return stride(from: forecastIntervalMinutes, through: forecastHorizonMinutes, by: forecastIntervalMinutes).map { $0 }
+        }
+        
+        static func forecastURL(for sourceTimestamp: Date, offsetMinutes: Int) -> String {
+            return String(format: forecastBaseURL, sourceTimestamp.radarTimestampString, offsetMinutes)
+        }
     }
     
     // MARK: - Testing Configuration

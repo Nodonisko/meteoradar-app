@@ -31,9 +31,43 @@ enum ImageLoadingState: Equatable {
     }
 }
 
+enum RadarFrameKind: Equatable, Hashable {
+    case observed
+    case forecast(offsetMinutes: Int)
+}
+
+extension RadarFrameKind {
+    var sortPriority: Int {
+        switch self {
+        case .observed:
+            return 0
+        case .forecast:
+            return 1
+        }
+    }
+    
+    var isForecast: Bool {
+        if case .forecast = self { return true }
+        return false
+    }
+
+    var isObserved: Bool {
+        if case .observed = self { return true }
+        return false
+    }
+
+    var forecastOffsetMinutes: Int? {
+        if case .forecast(let offset) = self { return offset }
+        return nil
+    }
+}
+
 class RadarImageData: ObservableObject {
     let timestamp: Date
     let urlString: String
+    let kind: RadarFrameKind
+    let sourceTimestamp: Date
+    let forecastTimestamp: Date
     
     // Image data (optional until loaded)
     @Published var image: UIImage?
@@ -49,7 +83,12 @@ class RadarImageData: ObservableObject {
     @Published var isCached: Bool = false
     @Published var cacheDate: Date?
     var cacheKey: String {
-        return timestamp.radarTimestampString
+        switch kind {
+        case .observed:
+            return timestamp.radarTimestampString
+        case .forecast:
+            return "\(sourceTimestamp.radarTimestampString)-\(forecastTimestamp.radarTimestampString)"
+        }
     }
     
     // Source tracking for debugging/UI
@@ -60,15 +99,21 @@ class RadarImageData: ObservableObject {
     }
     @Published var imageSource: ImageSource = .unknown
     
-    init(timestamp: Date, urlString: String) {
+    init(timestamp: Date, urlString: String, kind: RadarFrameKind, sourceTimestamp: Date, forecastTimestamp: Date) {
         self.timestamp = timestamp
         self.urlString = urlString
+        self.kind = kind
+        self.sourceTimestamp = sourceTimestamp
+        self.forecastTimestamp = forecastTimestamp
     }
     
     // Legacy initializer for backward compatibility
-    init(timestamp: Date, image: UIImage, urlString: String) {
+    init(timestamp: Date, image: UIImage, urlString: String, kind: RadarFrameKind, sourceTimestamp: Date, forecastTimestamp: Date) {
         self.timestamp = timestamp
         self.urlString = urlString
+        self.kind = kind
+        self.sourceTimestamp = sourceTimestamp
+        self.forecastTimestamp = forecastTimestamp
         self.image = image
         self.state = .success
         self.imageSource = .network
@@ -97,9 +142,16 @@ class RadarImageData: ObservableObject {
     }
     
     var shouldRetry: Bool {
+        let maxAttempts: Int
+        switch kind {
+        case .observed:
+            maxAttempts = Constants.Radar.maxRetryAttempts
+        case .forecast:
+            maxAttempts = Constants.Radar.forecastMaxRetryAttempts
+        }
         switch state {
         case .failed, .pending, .retrying:
-            return attemptCount < Constants.Radar.maxRetryAttempts
+            return attemptCount < maxAttempts
         default:
             return false
         }
@@ -120,9 +172,8 @@ class RadarImageData: ObservableObject {
 }
 
 class RadarImageSequence: ObservableObject {
-    @Published var images: [RadarImageData] = [] {
+    @Published private(set) var images: [RadarImageData] = [] {
         didSet {
-            // Set up forwarding for new images
             setupImageChangeForwarding()
         }
     }
@@ -148,7 +199,24 @@ class RadarImageSequence: ObservableObject {
     // Only successfully loaded images for animation (skips failed ones)
     // Sorted newest first so index 0 shows the latest image
     var loadedImages: [RadarImageData] {
-        return images.filter { $0.hasSucceeded }.sorted { $0.timestamp > $1.timestamp }
+        let observed = images
+            .filter { $0.hasSucceeded && $0.kind.isObserved }
+            .sorted { $0.timestamp > $1.timestamp }
+        guard let latestObserved = observed.first else {
+            return observed
+        }
+        let forecasts = images
+            .filter { $0.hasSucceeded && $0.kind.isForecast && Calendar.current.isDate($0.sourceTimestamp, equalTo: latestObserved.sourceTimestamp, toGranularity: .minute) }
+            .sorted { lhs, rhs in
+                switch (lhs.kind, rhs.kind) {
+                case (.forecast(let leftOffset), .forecast(let rightOffset)):
+                    if leftOffset != rightOffset { return leftOffset < rightOffset }
+                    return lhs.forecastTimestamp < rhs.forecastTimestamp
+                default:
+                    return lhs.forecastTimestamp < rhs.forecastTimestamp
+                }
+            }
+        return observed + forecasts
     }
     
     var currentImage: UIImage? {
@@ -160,6 +228,13 @@ class RadarImageSequence: ObservableObject {
         return availableImages[safeIndex].image
     }
     
+    var currentImageData: RadarImageData? {
+        let availableImages = loadedImages
+        guard !availableImages.isEmpty else { return nil }
+        let safeIndex = min(currentImageIndex, availableImages.count - 1)
+        return availableImages[safeIndex]
+    }
+    
     var currentTimestamp: Date? {
         let availableImages = loadedImages
         guard !availableImages.isEmpty else { return nil }
@@ -169,20 +244,63 @@ class RadarImageSequence: ObservableObject {
         return availableImages[safeIndex].timestamp
     }
     
-    // Animation methods that skip missing images
-    // Since loadedImages is sorted newest first, we need to reverse the animation direction
-    func nextFrame() {
-        let availableImages = loadedImages
-        guard !availableImages.isEmpty else { return }
-        let oldIndex = currentImageIndex
-        currentImageIndex = currentImageIndex > 0 ? currentImageIndex - 1 : availableImages.count - 1
-        print("RadarImageSequence: nextFrame() - index changed from \(oldIndex) to \(currentImageIndex) (total: \(availableImages.count))")
+    // MARK: - Animation Control
+    
+    /// Prepares for animation by jumping to the starting frame
+    /// Returns false if animation not possible (< 2 frames)
+    func prepareAnimation() -> Bool {
+        let available = loadedImages
+        guard available.count > 1 else { return false }
+        
+        let current = min(currentImageIndex, available.count - 1)
+        let currentFrame = available[current]
+        
+        // Determine where to start based on current position
+        if currentFrame.kind.isForecast {
+            // On forecast: find first forecast
+            if let firstForecast = available.firstIndex(where: { $0.kind.isForecast }) {
+                currentImageIndex = firstForecast
+                return true
+            }
+        } else {
+            // On observed: if on current (0), go to oldest; otherwise stay on current position
+            if current == 0, let lastObserved = available.lastIndex(where: { $0.kind.isObserved }) {
+                currentImageIndex = lastObserved
+            }
+            // else: stay at current position (will animate forward to current)
+            return true
+        }
+        
+        return false
     }
     
-    func previousFrame() {
-        let availableImages = loadedImages
-        guard !availableImages.isEmpty else { return }
-        currentImageIndex = (currentImageIndex + 1) % availableImages.count
+    /// Advances to next frame in animation sequence
+    /// Returns true if should stop (reached end), false to continue
+    func nextAnimationFrame() -> Bool {
+        let available = loadedImages
+        guard available.count > 1, currentImageIndex < available.count else { return true }
+        
+        let currentFrame = available[currentImageIndex]
+        
+        if currentFrame.kind.isForecast {
+            // Animating forecast: move forward until last forecast
+            let nextIndex = currentImageIndex + 1
+            if nextIndex < available.count && available[nextIndex].kind.isForecast {
+                currentImageIndex = nextIndex
+                return false
+            } else {
+                // Reached last forecast
+                return true
+            }
+        } else {
+            // Animating observed: move backward (toward index 0 = current)
+            if currentImageIndex > 0 {
+                currentImageIndex -= 1
+                // Stop when we reach current (index 0)
+                return currentImageIndex == 0
+            }
+            return true
+        }
     }
     
     func reset() {
@@ -191,27 +309,55 @@ class RadarImageSequence: ObservableObject {
     }
     
     // Management methods for sequential loading
-    func createPlaceholders(for timestamps: [Date]) {
+    func createPlaceholders(for timestamps: [Date], forecastOffsets: [Int] = []) {
         // Remember what we're currently viewing before making changes
         let currentViewingTimestamp = currentTimestamp
         
         // Create RadarImageData objects for all timestamps
-        let newImages = timestamps.map { timestamp in
+        var newImages: [RadarImageData] = []
+        for timestamp in timestamps {
             let urlString = String(format: Constants.Radar.baseURL, timestamp.radarTimestampString)
-            let imageData = RadarImageData(timestamp: timestamp, urlString: urlString)
-            
-            // Check if we had this timestamp before and preserve successful state
-            if let existingImage = images.first(where: { 
-                Calendar.current.isDate($0.timestamp, equalTo: timestamp, toGranularity: .minute) 
+            let observedData = RadarImageData(
+                timestamp: timestamp,
+                urlString: urlString,
+                kind: .observed,
+                sourceTimestamp: timestamp,
+                forecastTimestamp: timestamp
+            )
+            if let existingImage = images.first(where: {
+                Calendar.current.isDate($0.timestamp, equalTo: timestamp, toGranularity: .minute) && $0.kind == .observed
             }), existingImage.hasSucceeded {
-                imageData.image = existingImage.image
-                imageData.state = existingImage.state
-                imageData.isCached = existingImage.isCached
-                imageData.cacheDate = existingImage.cacheDate
-                imageData.imageSource = existingImage.imageSource
+                observedData.image = existingImage.image
+                observedData.state = existingImage.state
+                observedData.isCached = existingImage.isCached
+                observedData.cacheDate = existingImage.cacheDate
+                observedData.imageSource = existingImage.imageSource
             }
+            newImages.append(observedData)
             
-            return imageData
+            if timestamp == timestamps.first {
+                for offset in forecastOffsets {
+                    let forecastTimestamp = timestamp.addingTimeInterval(TimeInterval(offset * 60))
+                    let urlString = Constants.Radar.forecastURL(for: timestamp, offsetMinutes: offset)
+                    let forecastData = RadarImageData(
+                        timestamp: forecastTimestamp,
+                        urlString: urlString,
+                        kind: .forecast(offsetMinutes: offset),
+                        sourceTimestamp: timestamp,
+                        forecastTimestamp: forecastTimestamp
+                    )
+                    if let existingForecast = images.first(where: {
+                        $0.kind == .forecast(offsetMinutes: offset) && Calendar.current.isDate($0.sourceTimestamp, equalTo: timestamp, toGranularity: .minute)
+                    }), existingForecast.hasSucceeded {
+                        forecastData.image = existingForecast.image
+                        forecastData.state = existingForecast.state
+                        forecastData.isCached = existingForecast.isCached
+                        forecastData.cacheDate = existingForecast.cacheDate
+                        forecastData.imageSource = existingForecast.imageSource
+                    }
+                    newImages.append(forecastData)
+                }
+            }
         }
         
         images = newImages
@@ -246,6 +392,40 @@ class RadarImageSequence: ObservableObject {
         return images.filter { $0.hasFailed && $0.shouldRetry }
     }
     
+    var newestObservedImage: RadarImageData? {
+        return images
+            .filter { data in
+                if case .observed = data.kind { return true }
+                return false
+            }
+            .max { $0.timestamp < $1.timestamp }
+    }
+    
+    func forecastImages(for sourceTimestamp: Date) -> [RadarImageData] {
+        return images.filter { data in
+            guard case .forecast = data.kind else { return false }
+            return Calendar.current.isDate(data.sourceTimestamp, equalTo: sourceTimestamp, toGranularity: .minute)
+        }
+        .sorted { lhs, rhs in
+            switch (lhs.kind, rhs.kind) {
+            case (.forecast(let lOffset), .forecast(let rOffset)):
+                if lOffset != rOffset { return lOffset < rOffset }
+                return lhs.forecastTimestamp < rhs.forecastTimestamp
+            default:
+                return lhs.forecastTimestamp < rhs.forecastTimestamp
+            }
+        }
+    }
+    
+    var hasLoadingObservedImages: Bool {
+        return images.contains { data in
+            if case .observed = data.kind {
+                return data.isLoading
+            }
+            return false
+        }
+    }
+    
     func hasImage(for timestamp: Date) -> Bool {
         return images.contains { 
             Calendar.current.isDate($0.timestamp, equalTo: timestamp, toGranularity: .minute) && $0.hasSucceeded
@@ -276,4 +456,5 @@ class RadarImageSequence: ObservableObject {
             currentImageIndex = max(0, images.count - 1)
         }
     }
+
 }

@@ -1,0 +1,58 @@
+---
+description: Radar image animation behavior and rules
+globs:
+  - "**/Models/RadarImageSequence.swift"
+  - "**/Services/RadarImageManager.swift"
+  - "**/Views/Components/RadarProgressBar.swift"
+alwaysApply: false
+---
+
+## Radar Animation Behavior
+
+### Frame Types
+
+The radar sequence contains two types of frames:
+
+1. **Observed frames** - Historical radar images, sorted newest to oldest
+2. **Forecast frames** - Future predictions based on latest observed frame
+
+### Animation Rules
+
+#### Starting Animation from Current Frame (Newest Observed)
+
+When animation starts from the **current frame** (newest observed image):
+
+- Jump to **oldest observed frame**
+- Animate forward through history to **current frame**
+- Stop at current frame
+
+#### Starting Animation from Historical Frame
+
+When animation starts from any **historical observed frame**:
+
+- Start from that frame
+- Animate forward to **current frame**
+- Stop at current frame
+
+#### Starting Animation from Forecast Frame
+
+When animation starts from any **forecast frame** (not the last):
+
+- Start from that frame
+- Animate forward through forecasts to **last forecast**
+- Stop at last forecast
+
+#### Starting Animation from Last Forecast Frame
+
+When animation starts from the **last forecast frame**:
+
+- Jump to **first forecast frame**
+- Animate forward to **last forecast**
+- Stop at last forecast
+
+### Key Principles
+
+- **SIMPLE**: Animation direction is determined by current frame type
+- **PREDICTABLE**: Always animate toward a logical endpoint
+- **NO LOOPS**: Animation stops at endpoint, doesn't loop automatically
+- **STATELESS**: No stored animation ranges, compute behavior on-the-fly

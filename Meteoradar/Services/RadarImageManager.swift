@@ -23,6 +23,9 @@ class RadarImageManager: ObservableObject {
     private var updateTimer: Timer?
     private var retryTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
+    private var forecastFetchCancellable: AnyCancellable?
+    private var activeForecastSourceTimestamp: Date?
+    private var forecastRetryTimer: Timer?
     
     
     init() {
@@ -40,27 +43,21 @@ class RadarImageManager: ObservableObject {
     
     func startAnimation() {
         guard !radarSequence.images.isEmpty else { return }
-
-        let loadedFrames = radarSequence.loadedImages
-        guard loadedFrames.count > 1 else {
+        
+        // Prepare animation - this jumps to the start frame
+        guard radarSequence.prepareAnimation() else {
             radarSequence.isAnimating = false
             return
         }
-
+        
         radarSequence.isAnimating = true
-
-        // Reset any existing timer before starting a new one
         animationTimer?.invalidate()
-
-        // If we're on the newest image (index 0), immediately advance to start the sequence
-        if radarSequence.currentImageIndex == 0 {
-            advanceSequence(animated: false)
-        }
-
+        
+        // Start animation timer
         animationTimer = Timer.scheduledTimer(withTimeInterval: Constants.Radar.animationInterval, repeats: true) { [weak self] _ in
             guard let self = self else { return }
-
-            let shouldStop = self.advanceSequence(animated: true)
+            
+            let shouldStop = self.radarSequence.nextAnimationFrame()
             if shouldStop {
                 self.stopAnimation()
             }
@@ -79,10 +76,27 @@ class RadarImageManager: ObservableObject {
     
     func cancelAllFetches() {
         networkService.cancelAllRadarRequests()
+        forecastFetchCancellable?.cancel()
+        forecastFetchCancellable = nil
+        forecastRetryTimer?.invalidate()
+        forecastRetryTimer = nil
         // Reset any loading placeholders to pending state
         for image in radarSequence.images where image.isLoading {
             image.state = .pending
             image.startTime = nil
+        }
+        for image in radarSequence.images where image.kind.isForecast {
+            switch image.state {
+            case .failed where image.shouldRetry,
+                 .loading,
+                 .retrying:
+                image.state = .pending
+                image.startTime = nil
+                image.endTime = nil
+                image.lastError = nil
+            default:
+                break
+            }
         }
     }
     
@@ -120,15 +134,29 @@ class RadarImageManager: ObservableObject {
         
         // Capture if user was on newest image before we start fetching
         let wasOnNewest = (radarSequence.currentImageIndex == 0)
-        
+
         let timestamps = Date.radarTimestamps(count: Constants.Radar.imageCount)
-        
+
         // Create placeholders for all timestamps first (this ensures progress bar shows immediately)
-        radarSequence.createPlaceholders(for: timestamps)
+        let forecastOffsets = Constants.Radar.forecastOffsets()
+        radarSequence.createPlaceholders(for: timestamps, forecastOffsets: forecastOffsets)
+        activeForecastSourceTimestamp = timestamps.first
+        forecastFetchCancellable?.cancel()
+        forecastFetchCancellable = nil
+        forecastRetryTimer?.invalidate()
+        forecastRetryTimer = nil
         
         // Fetch images that we don't already have
         let timestampsToFetch = timestamps.filter { timestamp in
             !radarSequence.hasImage(for: timestamp)
+        }
+
+        if timestampsToFetch.isEmpty {
+            isLoading = false
+            DispatchQueue.main.async { [weak self] in
+                self?.startForecastFetchIfNeeded(force: true)
+            }
+            return
         }
 
         performFetch(for: timestampsToFetch, wasOnNewest: wasOnNewest, isRetryAttempt: false)
@@ -144,7 +172,7 @@ class RadarImageManager: ObservableObject {
         
         for timestamp in timestamps {
             guard let placeholder = radarSequence.images.first(where: {
-                Calendar.current.isDate($0.timestamp, equalTo: timestamp, toGranularity: .minute)
+                $0.kind.isObserved && Calendar.current.isDate($0.timestamp, equalTo: timestamp, toGranularity: .minute)
             }) else {
                 logger.error("Attempted to fetch radar frame \(timestamp.radarTimestampString) but placeholder missing")
                 continue
@@ -178,7 +206,7 @@ class RadarImageManager: ObservableObject {
         for radarResult in radarResults {
             // Find the placeholder to update
             if let placeholder = radarSequence.images.first(where: { 
-                Calendar.current.isDate($0.timestamp, equalTo: radarResult.timestamp, toGranularity: .minute) 
+                $0.kind.isObserved && Calendar.current.isDate($0.timestamp, equalTo: radarResult.timestamp, toGranularity: .minute) 
             }) {
                 placeholder.endTime = Date()
                 
@@ -204,7 +232,7 @@ class RadarImageManager: ObservableObject {
         // Detect timestamps that never produced a result (still marked as loading)
         let unresolvedTimestamps = attemptedTimestamps.compactMap { timestamp -> (Date, RadarImageData)? in
             guard let placeholder = radarSequence.images.first(where: {
-                Calendar.current.isDate($0.timestamp, equalTo: timestamp, toGranularity: .minute)
+                $0.kind.isObserved && Calendar.current.isDate($0.timestamp, equalTo: timestamp, toGranularity: .minute)
             }) else {
                 return nil
             }
@@ -251,6 +279,15 @@ class RadarImageManager: ObservableObject {
         
         if successCount > 0 {
             errorMessage = nil
+            if radarSequence.hasLoadingObservedImages == false {
+                startForecastFetchIfNeeded()
+            }
+        } else if !fetchErrors.isEmpty {
+            // If observed fetch failed entirely, ensure forecast retry is cancelled
+            forecastFetchCancellable?.cancel()
+            forecastFetchCancellable = nil
+            forecastRetryTimer?.invalidate()
+            forecastRetryTimer = nil
         }
 
         if !retryCandidates.isEmpty {
@@ -307,9 +344,141 @@ class RadarImageManager: ObservableObject {
         animationTimer?.invalidate()
         updateTimer?.invalidate()
         retryTimer?.invalidate()
+        forecastRetryTimer?.invalidate()
         animationTimer = nil
         updateTimer = nil
         retryTimer = nil
+        forecastRetryTimer = nil
+    }
+
+    private func startForecastFetchIfNeeded(force: Bool = false) {
+        if !force && forecastFetchCancellable != nil { return }
+        guard let newestObserved = radarSequence.newestObservedImage, newestObserved.hasSucceeded else { return }
+        guard radarSequence.hasLoadingObservedImages == false else { return }
+
+        let forecastPlaceholders = radarSequence.forecastImages(for: newestObserved.timestamp)
+        let targets = forecastPlaceholders.filter { data in
+            switch data.state {
+            case .pending:
+                return true
+            case .failed where data.shouldRetry:
+                return true
+            case .loading, .retrying:
+                return forecastFetchCancellable == nil || force
+            case .success:
+                return force
+            default:
+                return false
+            }
+        }
+
+        guard !targets.isEmpty else {
+            forecastFetchCancellable = nil
+            forecastRetryTimer?.invalidate()
+            forecastRetryTimer = nil
+            return
+        }
+
+        activeForecastSourceTimestamp = newestObserved.timestamp
+
+        for placeholder in targets {
+            if force {
+                placeholder.image = nil
+                placeholder.startTime = nil
+                placeholder.endTime = nil
+                placeholder.attemptCount = 0
+                placeholder.state = .pending
+                placeholder.lastError = nil
+            }
+
+            if case .loading = placeholder.state {
+                placeholder.state = .pending
+            }
+            if case .retrying = placeholder.state {
+                placeholder.state = .pending
+            }
+
+            placeholder.startTime = Date()
+            placeholder.attemptCount += 1
+            if placeholder.attemptCount > 1 {
+                placeholder.state = .retrying(attemptCount: placeholder.attemptCount)
+            } else {
+                placeholder.state = .loading
+            }
+        }
+
+        let offsets = Array(Set(targets.compactMap { $0.kind.forecastOffsetMinutes })).sorted()
+        guard !offsets.isEmpty else {
+            forecastFetchCancellable = nil
+            forecastRetryTimer?.invalidate()
+            forecastRetryTimer = nil
+            return
+        }
+
+        forecastFetchCancellable = networkService.fetchForecastSequence(sourceTimestamp: newestObserved.timestamp, offsets: offsets)
+            .sink(
+                receiveCompletion: { [weak self] _ in
+                    self?.forecastFetchCancellable = nil
+                },
+                receiveValue: { [weak self] results in
+                    guard let self = self else { return }
+                    for result in results {
+                        guard let placeholder = self.placeholder(for: result) else {
+                            continue
+                        }
+
+                        placeholder.endTime = Date()
+
+                        switch result.result {
+                        case .success(let image):
+                            self.radarSequence.updateImage(placeholder, with: image, fromCache: result.wasFromCache)
+                        case .failure(let error):
+                            self.handleImageFetchError(error, placeholder: placeholder, timestamp: result.timestamp)
+                        }
+                    }
+
+                    let pending = self.radarSequence.forecastImages(for: newestObserved.timestamp).filter { data in
+                        switch data.state {
+                        case .success:
+                            return false
+                        case .failed:
+                            return data.shouldRetry
+                        case .pending, .loading, .retrying:
+                            return true
+                        case .skipped:
+                            return false
+                        }
+                    }
+
+                    self.forecastFetchCancellable = nil
+
+                    if pending.isEmpty {
+                        self.forecastRetryTimer?.invalidate()
+                        self.forecastRetryTimer = nil
+                    } else {
+                        self.scheduleForecastRetry()
+                    }
+                }
+            )
+    }
+
+    private func placeholder(for result: RadarImageResult) -> RadarImageData? {
+        let targetKey: String
+        switch result.kind {
+        case .observed:
+            targetKey = result.timestamp.radarTimestampString
+        case .forecast:
+            targetKey = "\(result.sourceTimestamp.radarTimestampString)-\(result.timestamp.radarTimestampString)"
+        }
+
+        return radarSequence.images.first { $0.cacheKey == targetKey }
+    }
+
+    private func scheduleForecastRetry() {
+        forecastRetryTimer?.invalidate()
+        forecastRetryTimer = Timer.scheduledTimer(withTimeInterval: Constants.Radar.forecastRetryDelay, repeats: false) { [weak self] _ in
+            self?.startForecastFetchIfNeeded()
+        }
     }
 
     // MARK: - Rendering Coordination
@@ -323,23 +492,6 @@ class RadarImageManager: ObservableObject {
         setDisplayedTimestamp(timestamp, deferred: false)
     }
 
-    @discardableResult
-    private func advanceSequence(animated: Bool) -> Bool {
-        let availableImages = radarSequence.loadedImages
-        guard !availableImages.isEmpty else { return true }
-
-        if availableImages.count == 1 {
-            radarSequence.currentImageIndex = 0
-            return true
-        }
-
-        let previousIndex = radarSequence.currentImageIndex
-        radarSequence.nextFrame()
-
-        guard animated else { return false }
-
-        return radarSequence.currentImageIndex == 0 && previousIndex != 0
-    }
 
     private func setDisplayedTimestamp(_ timestamp: Date?, deferred: Bool) {
         guard displayedTimestamp != timestamp else { return }
