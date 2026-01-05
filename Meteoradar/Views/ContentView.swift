@@ -12,7 +12,13 @@ import CoreLocation
 struct ContentView: View {
     @StateObject private var locationManager = LocationManager()
     @StateObject private var radarManager = RadarImageManager()
-    @State private var region = Constants.Radar.defaultRegion
+    @State private var region: MKCoordinateRegion
+    
+    init() {
+        // Initialize region from saved state, or use default if no saved state exists
+        let savedRegion = MapStateService.shared.loadRegion()
+        _region = State(initialValue: savedRegion ?? Constants.Radar.defaultRegion)
+    }
     
     // Helper function to detect if running in simulator
     private var isRunningInSimulator: Bool {

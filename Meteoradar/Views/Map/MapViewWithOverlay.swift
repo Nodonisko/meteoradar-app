@@ -161,6 +161,7 @@ struct MapViewWithOverlay: UIViewRepresentable {
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             parent.region = mapView.region
+            MapStateService.shared.saveRegion(mapView.region)
         }
     }
 }
