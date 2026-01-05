@@ -43,6 +43,24 @@ struct SettingsView: View {
                 } footer: {
                     Text("settings.overlay_footer")
                 }
+
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("settings.time_interval")
+                        Picker("settings.time_interval", selection: $settings.radarImageIntervalMinutes) {
+                            ForEach(SettingsService.availableIntervals, id: \.self) { minutes in
+                                Text("\(minutes) min").tag(minutes)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                    }
+                    .padding(.vertical, 4)
+                } header: {
+                    Text("settings.time_interval_section")
+                } footer: {
+                    Text("settings.time_interval_footer")
+                }
                 
                 Section {
                     Button(String(localized: "settings.reset_to_defaults")) {

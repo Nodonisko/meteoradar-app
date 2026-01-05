@@ -18,6 +18,7 @@ class RadarImageManager: ObservableObject {
     @Published private(set) var displayedTimestamp: Date?
     
     private let networkService = NetworkService.shared
+    private let settingsService = SettingsService.shared
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Meteoradar", category: "RadarImageManager")
     private var animationTimer: Timer?
     private var updateTimer: Timer?
@@ -26,10 +27,12 @@ class RadarImageManager: ObservableObject {
     private var forecastFetchCancellable: AnyCancellable?
     private var activeForecastSourceTimestamp: Date?
     private var forecastRetryTimer: Timer?
+    private var lastUsedIntervalMinutes: Int?
     
     
     init() {
         setupPublishedForwarding()
+        setupSettingsObserver()
         fetchLatestRadarImages()
         setupUpdateTimer()
     }
@@ -115,6 +118,23 @@ class RadarImageManager: ObservableObject {
             }
             .store(in: &cancellables)
     }
+    
+    private func setupSettingsObserver() {
+        // Observe changes to radar image interval and refresh when it changes
+        settingsService.$radarImageIntervalMinutes
+            .dropFirst() // Skip initial value (we already fetch on init)
+            .removeDuplicates()
+            .sink { [weak self] newInterval in
+                guard let self = self else { return }
+                // Only refresh if interval actually changed from what we last used
+                if self.lastUsedIntervalMinutes != newInterval {
+                    self.logger.info("Radar interval changed to \(newInterval) minutes, refreshing images")
+                    self.cancelAllFetches()
+                    self.fetchLatestRadarImages()
+                }
+            }
+            .store(in: &cancellables)
+    }
 
     private func setupUpdateTimer() {
         // Simple repeating timer - check every 10 seconds for radar updates
@@ -140,7 +160,9 @@ class RadarImageManager: ObservableObject {
         // Capture if user was on newest image before we start fetching
         let wasOnNewest = (radarSequence.currentImageIndex == 0)
 
-        let timestamps = Date.radarTimestamps(count: Constants.Radar.imageCount)
+        let interval = settingsService.radarImageIntervalMinutes
+        lastUsedIntervalMinutes = interval
+        let timestamps = Date.radarTimestamps(count: Constants.Radar.imageCount, intervalMinutes: interval)
 
         // Cancel any active forecast fetch BEFORE creating new placeholders
         // This ensures old network operations don't try to update stale placeholders

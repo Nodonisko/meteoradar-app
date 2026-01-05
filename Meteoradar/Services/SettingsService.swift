@@ -14,10 +14,17 @@ final class SettingsService: ObservableObject {
     
     private let defaults = UserDefaults.standard
     
+    /// Available time interval options in minutes for observed radar images
+    static let availableIntervals = [5, 10, 15, 20]
+    
+    /// Default time interval in minutes
+    static let defaultIntervalMinutes = 5
+    
     // UserDefaults keys
     private enum Keys {
         static let overlayOpacity = "settings.overlayOpacity"
         static let forecastOverlayOpacity = "settings.forecastOverlayOpacity"
+        static let radarImageIntervalMinutes = "settings.radarImageIntervalMinutes"
     }
     
     /// Opacity for observed radar frames (0.0 - 1.0)
@@ -34,6 +41,17 @@ final class SettingsService: ObservableObject {
         }
     }
     
+    /// Time interval between observed radar images in minutes (5, 10, 15, or 20)
+    @Published var radarImageIntervalMinutes: Int {
+        didSet {
+            // Validate the value is one of the allowed options
+            if !Self.availableIntervals.contains(radarImageIntervalMinutes) {
+                radarImageIntervalMinutes = Self.defaultIntervalMinutes
+            }
+            defaults.set(radarImageIntervalMinutes, forKey: Keys.radarImageIntervalMinutes)
+        }
+    }
+    
     private init() {
         // Load saved values or use defaults from Constants
         if defaults.object(forKey: Keys.overlayOpacity) != nil {
@@ -47,12 +65,21 @@ final class SettingsService: ObservableObject {
         } else {
             self.forecastOverlayOpacity = Constants.Radar.forecastOverlayAlpha
         }
+        
+        if defaults.object(forKey: Keys.radarImageIntervalMinutes) != nil {
+            let savedInterval = defaults.integer(forKey: Keys.radarImageIntervalMinutes)
+            // Validate saved value is valid, otherwise use default
+            self.radarImageIntervalMinutes = Self.availableIntervals.contains(savedInterval) ? savedInterval : Self.defaultIntervalMinutes
+        } else {
+            self.radarImageIntervalMinutes = Self.defaultIntervalMinutes
+        }
     }
     
     /// Resets all settings to their default values
     func resetToDefaults() {
         overlayOpacity = Constants.Radar.overlayAlpha
         forecastOverlayOpacity = Constants.Radar.forecastOverlayAlpha
+        radarImageIntervalMinutes = Self.defaultIntervalMinutes
     }
 }
 

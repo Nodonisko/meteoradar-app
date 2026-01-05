@@ -16,13 +16,20 @@ extension Date {
     
     /// Rounds the date down to the nearest 5-minute interval in UTC
     var roundedToNearestRadarTime: Date {
+        return roundedToInterval(minutes: 5)
+    }
+    
+    /// Rounds the date down to the nearest interval in UTC
+    /// - Parameter minutes: The interval in minutes to round down to (must be a divisor of 60 for hourly alignment)
+    /// - Returns: Date rounded down to the nearest interval boundary
+    func roundedToInterval(minutes: Int) -> Date {
         let calendar = Calendar(identifier: .gregorian)
         var utcCalendar = calendar
         utcCalendar.timeZone = TimeZone(abbreviation: "UTC")!
         
         let components = utcCalendar.dateComponents([.year, .month, .day, .hour, .minute], from: self)
         let minute = components.minute ?? 0
-        let roundedMinute = (minute / 5) * 5 // Round down to nearest 5 minutes
+        let roundedMinute = (minute / minutes) * minutes // Round down to nearest interval
         
         var newComponents = components
         newComponents.minute = roundedMinute
@@ -64,14 +71,19 @@ extension Date {
     }
     
     /// Returns an array of radar timestamps going back in time
-    /// - Parameter count: Number of timestamps to generate
+    /// - Parameters:
+    ///   - count: Number of timestamps to generate
+    ///   - intervalMinutes: Time interval between images in minutes (default: 5)
     /// - Returns: Array of dates in descending chronological order (newest first)
-    static func radarTimestamps(count: Int) -> [Date] {
-        let latestTime = Date.utcNow.roundedToNearestRadarTime
+    static func radarTimestamps(count: Int, intervalMinutes: Int = 5) -> [Date] {
+        // Round to the interval boundary, not just 5 minutes
+        // e.g., for 20 min interval at 18:05, start from 18:00 (not 18:05)
+        let latestTime = Date.utcNow.roundedToInterval(minutes: intervalMinutes)
+        let intervalSeconds = Double(intervalMinutes * 60)
         var timestamps: [Date] = []
         
         for i in 0..<count {
-            let timestamp = latestTime.addingTimeInterval(-Double(i) * Constants.Radar.radarImageInterval)
+            let timestamp = latestTime.addingTimeInterval(-Double(i) * intervalSeconds)
             timestamps.append(timestamp)
         }
         
