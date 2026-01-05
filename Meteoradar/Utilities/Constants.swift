@@ -36,7 +36,10 @@ struct Constants {
         // Forecast configuration
         static let forecastHorizonMinutes: Int = 60 // Forecast range into future
         static let forecastIntervalMinutes: Int = 10 // Step between forecast frames
-        static let forecastOverlayAlpha: CGFloat = 0.5
+        static let forecastOverlayAlpha: CGFloat = 0.55
+
+        // Overlay alpha configuration
+        static let overlayAlpha: CGFloat = 0.7
         
         // Cache configuration
         static let cacheEnabled = false // Enable file system caching
@@ -55,8 +58,6 @@ struct Constants {
             ),
             span: MKCoordinateSpan(latitudeDelta: 3.5, longitudeDelta: 8.5)
         )
-        
-        static let overlayAlpha: CGFloat = 0.7
         
         static func forecastOffsets() -> [Int] {
             guard forecastHorizonMinutes > 0, forecastIntervalMinutes > 0 else { return [] }

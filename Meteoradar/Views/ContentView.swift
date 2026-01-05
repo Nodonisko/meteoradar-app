@@ -13,6 +13,7 @@ struct ContentView: View {
     @StateObject private var locationManager = LocationManager()
     @StateObject private var radarManager = RadarImageManager()
     @State private var region: MKCoordinateRegion
+    @State private var showSettings = false
     
     init() {
         // Initialize region from saved state, or use default if no saved state exists
@@ -34,7 +35,7 @@ struct ContentView: View {
             MapViewWithOverlay(region: $region, radarImageManager: radarManager, userLocation: locationManager.location)
                 .ignoresSafeArea()
             
-            // Timestamp display in top left corner
+            // Timestamp display in top left corner, settings button in top right
             VStack {
                 HStack {
                     RadarTimestampDisplay(timestamp: radarManager.radarSequence.currentTimestamp)
@@ -42,6 +43,19 @@ struct ContentView: View {
                         .padding(.top, 8)
                     
                     Spacer()
+                    
+                    Button(action: {
+                        showSettings = true
+                    }) {
+                        Image(systemName: "gearshape.fill")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                            .frame(width: 44, height: 44)
+                            .background(Color.black.opacity(0.5))
+                            .clipShape(Circle())
+                    }
+                    .padding(.trailing, 16)
+                    .padding(.top, 8)
                 }
                 
                 Spacer()
@@ -104,6 +118,10 @@ struct ContentView: View {
                     span: Constants.Location.userLocationSpan
                 )
             }
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+                .presentationDetents([.medium])
         }
     }
 }

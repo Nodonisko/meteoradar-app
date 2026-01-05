@@ -14,18 +14,21 @@ class RadarImageOverlay: NSObject, MKOverlay {
     let boundingMapRect: MKMapRect
     var image: UIImage?  // Make this mutable so we can update it
     private(set) var timestamp: Date?
+    private(set) var isForecast: Bool = false
     
-    init(coordinate: CLLocationCoordinate2D, boundingMapRect: MKMapRect, image: UIImage?, timestamp: Date?) {
+    init(coordinate: CLLocationCoordinate2D, boundingMapRect: MKMapRect, image: UIImage?, timestamp: Date?, isForecast: Bool = false) {
         self.coordinate = coordinate
         self.boundingMapRect = boundingMapRect
         self.image = image
         self.timestamp = timestamp
+        self.isForecast = isForecast
         super.init()
     }
     
-    func updateImage(_ newImage: UIImage?, timestamp: Date?) {
+    func updateImage(_ newImage: UIImage?, timestamp: Date?, isForecast: Bool = false) {
         self.image = newImage
         self.timestamp = timestamp
+        self.isForecast = isForecast
     }
     
     // Define the radar coverage area with exact bounds

@@ -8,6 +8,7 @@
 import SwiftUI
 import MapKit
 import UIKit
+import Combine
 
 struct MapViewWithOverlay: UIViewRepresentable {
     @Binding var region: MKCoordinateRegion
@@ -56,21 +57,36 @@ struct MapViewWithOverlay: UIViewRepresentable {
         var radarOverlay: RadarImageOverlay?
         var radarRenderer: RadarImageRenderer?
         var userLocationAnnotation: MKPointAnnotation?
+        private var settingsCancellables = Set<AnyCancellable>()
         
         init(_ parent: MapViewWithOverlay) {
             self.parent = parent
+            super.init()
+            
+            // Subscribe to settings changes to trigger redraw when opacity changes
+            let settings = SettingsService.shared
+            settings.$overlayOpacity
+                .merge(with: settings.$forecastOverlayOpacity)
+                .sink { [weak self] _ in
+                    self?.radarRenderer?.setNeedsDisplay()
+                }
+                .store(in: &settingsCancellables)
         }
         
         deinit {
             // Clean up references to prevent retain cycles
+            settingsCancellables.removeAll()
             radarRenderer = nil
             radarOverlay = nil
             userLocationAnnotation = nil
         }
         
         func updateRadarImage(radarImageManager: RadarImageManager, currentImage: UIImage?, timestamp: Date?) {
+            // Check if current image is a forecast
+            let isForecast = radarImageManager.radarSequence.currentImageData?.kind.isForecast ?? false
+            
             // Simply update the image in the existing overlay
-            radarOverlay?.updateImage(currentImage, timestamp: timestamp)
+            radarOverlay?.updateImage(currentImage, timestamp: timestamp, isForecast: isForecast)
             radarRenderer?.onRenderCompleted = { renderedTimestamp in
                 radarImageManager.overlayDidUpdate(imageTimestamp: renderedTimestamp)
             }

@@ -40,8 +40,11 @@ class RadarImageRenderer: MKOverlayRenderer {
         context.setAllowsAntialiasing(false)
         
         // Set blend mode for transparency
+        // Use different alpha for forecast vs observed images
         context.setBlendMode(.normal)
-        context.setAlpha(Constants.Radar.overlayAlpha)
+        let settings = SettingsService.shared
+        let alpha = radarOverlay.isForecast ? settings.forecastOverlayOpacity : settings.overlayOpacity
+        context.setAlpha(alpha)
         
         // Draw the image
         context.draw(image.cgImage!, in: rect)
