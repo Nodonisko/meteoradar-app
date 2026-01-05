@@ -83,12 +83,7 @@ class RadarImageData: ObservableObject {
     @Published var isCached: Bool = false
     @Published var cacheDate: Date?
     var cacheKey: String {
-        switch kind {
-        case .observed:
-            return timestamp.radarTimestampString
-        case .forecast:
-            return "\(sourceTimestamp.radarTimestampString)-\(forecastTimestamp.radarTimestampString)"
-        }
+        FileSystemImageCache.cacheKey(for: kind, sourceTimestamp: sourceTimestamp, forecastTimestamp: forecastTimestamp)
     }
     
     // Source tracking for debugging/UI
@@ -313,49 +308,53 @@ class RadarImageSequence: ObservableObject {
         // Remember what we're currently viewing before making changes
         let currentViewingTimestamp = currentTimestamp
         
-        // Create RadarImageData objects for all timestamps
+        // Build list of images we need (reusing existing successful ones where possible)
         var newImages: [RadarImageData] = []
+        
         for timestamp in timestamps {
-            let urlString = String(format: Constants.Radar.baseURL, timestamp.radarTimestampString)
-            let observedData = RadarImageData(
-                timestamp: timestamp,
-                urlString: urlString,
-                kind: .observed,
-                sourceTimestamp: timestamp,
-                forecastTimestamp: timestamp
-            )
-            if let existingImage = images.first(where: {
-                Calendar.current.isDate($0.timestamp, equalTo: timestamp, toGranularity: .minute) && $0.kind == .observed
-            }), existingImage.hasSucceeded {
-                observedData.image = existingImage.image
-                observedData.state = existingImage.state
-                observedData.isCached = existingImage.isCached
-                observedData.cacheDate = existingImage.cacheDate
-                observedData.imageSource = existingImage.imageSource
+            // Try to reuse existing successful observed image
+            if let existingObserved = images.first(where: {
+                $0.kind == .observed && 
+                Calendar.current.isDate($0.timestamp, equalTo: timestamp, toGranularity: .minute) &&
+                $0.hasSucceeded
+            }) {
+                newImages.append(existingObserved)
+            } else {
+                // Create new placeholder only if we don't have a successful one
+                let urlString = String(format: Constants.Radar.baseURL, timestamp.radarTimestampString)
+                let observedData = RadarImageData(
+                    timestamp: timestamp,
+                    urlString: urlString,
+                    kind: .observed,
+                    sourceTimestamp: timestamp,
+                    forecastTimestamp: timestamp
+                )
+                newImages.append(observedData)
             }
-            newImages.append(observedData)
             
+            // Handle forecast images for the newest timestamp
             if timestamp == timestamps.first {
                 for offset in forecastOffsets {
-                    let forecastTimestamp = timestamp.addingTimeInterval(TimeInterval(offset * 60))
-                    let urlString = Constants.Radar.forecastURL(for: timestamp, offsetMinutes: offset)
-                    let forecastData = RadarImageData(
-                        timestamp: forecastTimestamp,
-                        urlString: urlString,
-                        kind: .forecast(offsetMinutes: offset),
-                        sourceTimestamp: timestamp,
-                        forecastTimestamp: forecastTimestamp
-                    )
+                    // Try to reuse existing successful forecast image
                     if let existingForecast = images.first(where: {
-                        $0.kind == .forecast(offsetMinutes: offset) && Calendar.current.isDate($0.sourceTimestamp, equalTo: timestamp, toGranularity: .minute)
-                    }), existingForecast.hasSucceeded {
-                        forecastData.image = existingForecast.image
-                        forecastData.state = existingForecast.state
-                        forecastData.isCached = existingForecast.isCached
-                        forecastData.cacheDate = existingForecast.cacheDate
-                        forecastData.imageSource = existingForecast.imageSource
+                        $0.kind == .forecast(offsetMinutes: offset) && 
+                        Calendar.current.isDate($0.sourceTimestamp, equalTo: timestamp, toGranularity: .minute) &&
+                        $0.hasSucceeded
+                    }) {
+                        newImages.append(existingForecast)
+                    } else {
+                        // Create new placeholder only if we don't have a successful one
+                        let forecastTimestamp = timestamp.addingTimeInterval(TimeInterval(offset * 60))
+                        let urlString = Constants.Radar.forecastURL(for: timestamp, offsetMinutes: offset)
+                        let forecastData = RadarImageData(
+                            timestamp: forecastTimestamp,
+                            urlString: urlString,
+                            kind: .forecast(offsetMinutes: offset),
+                            sourceTimestamp: timestamp,
+                            forecastTimestamp: forecastTimestamp
+                        )
+                        newImages.append(forecastData)
                     }
-                    newImages.append(forecastData)
                 }
             }
         }

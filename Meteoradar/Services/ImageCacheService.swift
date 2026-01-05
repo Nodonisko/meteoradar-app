@@ -17,6 +17,24 @@ protocol ImageCacheService {
     func isCached(key: String) -> Bool
 }
 
+// MARK: - Cache Key Generation
+extension ImageCacheService {
+    /// Generate cache key for radar image data
+    /// - Parameters:
+    ///   - kind: Type of radar frame (observed or forecast)
+    ///   - sourceTimestamp: Source timestamp for the image
+    ///   - forecastTimestamp: Forecast timestamp (same as source for observed images)
+    /// - Returns: Unique cache key string
+    static func cacheKey(for kind: RadarFrameKind, sourceTimestamp: Date, forecastTimestamp: Date) -> String {
+        switch kind {
+        case .observed:
+            return sourceTimestamp.radarTimestampString
+        case .forecast:
+            return "\(sourceTimestamp.radarTimestampString)-\(forecastTimestamp.radarTimestampString)"
+        }
+    }
+}
+
 class FileSystemImageCache: ImageCacheService {
     static let shared = FileSystemImageCache()
     

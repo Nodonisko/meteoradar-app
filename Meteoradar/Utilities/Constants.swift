@@ -14,7 +14,7 @@ struct Constants {
     // MARK: - Radar Configuration
     struct Radar {
         // Base URL pattern for radar images (timestamp will be inserted)
-        static let baseURL = "https://radar.danielsuchy.cz/output/radar_%@_overlay2x.png"
+        static let baseURL = "https://radar.danielsuchy.cz/output/radar_%@_overlay.png"
         static let forecastBaseURL = "https://radar.danielsuchy.cz/output_forecast/radar_%@_forecast_fct%d_overlay.png"
         
         // URL parsing pattern - matches any datetime string (YYYYMMDD_HHMM) in the URL
@@ -39,7 +39,7 @@ struct Constants {
         static let forecastOverlayAlpha: CGFloat = 0.5
         
         // Cache configuration
-        static let cacheEnabled = true // Enable file system caching
+        static let cacheEnabled = false // Enable file system caching
         static let maxCacheSize: Int64 = 50 * 1024 * 1024 // 50MB cache limit
         static let cacheExpirationDays = 7 // Remove cached images older than 7 days
         
@@ -66,15 +66,6 @@ struct Constants {
         static func forecastURL(for sourceTimestamp: Date, offsetMinutes: Int) -> String {
             return String(format: forecastBaseURL, sourceTimestamp.radarTimestampString, offsetMinutes)
         }
-    }
-    
-    // MARK: - Testing Configuration
-    struct Testing {
-        // Set to true to enable artificial loading delays for testing loading states
-        static let enableSlowLoading = false
-        static let artificialLoadingDelay: TimeInterval = 2.0 // seconds
-        static let simulateRandomFailures = false // Set to true to randomly fail some requests
-        static let failureRate: Double = 0.3 // 20% of requests will fail when enabled
     }
     
     // MARK: - Network Configuration

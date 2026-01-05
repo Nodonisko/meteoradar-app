@@ -51,21 +51,24 @@ struct RadarProgressBar: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                ForEach(stableImages, id: \.id) { item in
-                    ProgressBarBox(
-                        imageData: item.data,
-                        radarSequence: radarSequence,
-                        radarImageManager: radarImageManager
-                    )
-                }
-            }
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        handleDrag(at: value.location)
+            GeometryReader { geometry in
+                HStack(spacing: 8) {
+                    ForEach(stableImages, id: \.id) { item in
+                        ProgressBarBox(
+                            imageData: item.data,
+                            radarSequence: radarSequence,
+                            radarImageManager: radarImageManager
+                        )
                     }
-            )
+                }
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            handleDrag(at: value.location, containerWidth: geometry.size.width)
+                        }
+                )
+            }
+            .frame(height: Constants.boxHeight)
             .padding(.horizontal, Constants.horizontalPadding)
             .padding(.top, Constants.topPadding)
             .padding(.bottom, Constants.bottomPadding)
@@ -80,30 +83,27 @@ struct RadarProgressBar: View {
         .background(
             Rectangle()
                 .fill(Color.black.opacity(0.8))
+                .cornerRadius(16)
         )
         .shadow(color: Constants.shadowColor, radius: Constants.shadowRadius, x: 0, y: Constants.shadowOffsetY)
     }
     
     
     
-    private func handleDrag(at location: CGPoint) {
+    private func handleDrag(at location: CGPoint, containerWidth: CGFloat) {
         // Calculate which box is under the finger
         let totalBoxes = stableImages.count
         guard totalBoxes > 0 else { return }
         
-        // Get the HStack width (total width minus horizontal padding)
-        let hStackPadding: CGFloat = Constants.horizontalPadding * 2 // padding on each side
         let boxSpacing: CGFloat = Constants.boxSpacing
         let totalSpacing = CGFloat(totalBoxes - 1) * boxSpacing
         
-        // Calculate available width for boxes
-        let estimatedContainerWidth: CGFloat = UIScreen.main.bounds.width
-        let availableWidth = estimatedContainerWidth - hStackPadding
-        let boxWidth = (availableWidth - totalSpacing) / CGFloat(totalBoxes)
+        // Use actual container width from GeometryReader
+        let boxWidth = (containerWidth - totalSpacing) / CGFloat(totalBoxes)
         
         // Calculate which box index based on x position
-        let adjustedX = location.x + (boxWidth / 2) // Adjust for box center
-        let boxIndex = Int(adjustedX / (boxWidth + boxSpacing))
+        // Each box occupies (boxWidth + boxSpacing) except the last one
+        let boxIndex = Int(location.x / (boxWidth + boxSpacing))
         
         // Ensure index is within bounds
         let clampedIndex = max(0, min(boxIndex, totalBoxes - 1))
@@ -154,13 +154,18 @@ struct ProgressBarBox: View {
         guard let displayedTimestamp = radarImageManager.displayedTimestamp else { return false }
         return Calendar.current.isDate(imageData.timestamp, equalTo: displayedTimestamp, toGranularity: .minute)
     }
+
+    // log whole imageData
+    private var imageDataString: String {
+        return "imageData: \(imageData.timestamp.radarTimestampString), state: \(imageData.state), kind: \(imageData.kind), sourceTimestamp: \(imageData.sourceTimestamp.radarTimestampString), forecastTimestamp: \(imageData.forecastTimestamp.radarTimestampString)"
+    }
     
     private var isEnabled: Bool {
         imageData.state == .success
     }
     
     var body: some View {
-        RoundedRectangle(cornerRadius: 2)
+        RoundedRectangle(cornerRadius: 0)
             .fill(fillColor)
             .frame(height: RadarProgressBar.Constants.boxHeight)
             .overlay(
@@ -177,6 +182,7 @@ struct ProgressBarBox: View {
                     handleSelection()
                 } else {
                     print("Tap ignored - button not enabled")
+                    print("imageDataString: \(imageDataString)")
                 }
             }
     }
@@ -320,7 +326,9 @@ struct ProgressBarButtonStyle: ButtonStyle {
                 Text("Pending").foregroundColor(.white).font(.caption)
             }
         }
+        .padding()
+        .background(Color.black)
+        .cornerRadius(16)
     }
-    .padding()
-    .background(Color.black)
+    .background(Color.white)
 }

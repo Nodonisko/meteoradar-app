@@ -76,10 +76,7 @@ class RadarImageManager: ObservableObject {
     
     func cancelAllFetches() {
         networkService.cancelAllRadarRequests()
-        forecastFetchCancellable?.cancel()
-        forecastFetchCancellable = nil
-        forecastRetryTimer?.invalidate()
-        forecastRetryTimer = nil
+        cancelForecastFetch()
         // Reset any loading placeholders to pending state
         for image in radarSequence.images where image.isLoading {
             image.state = .pending
@@ -98,6 +95,14 @@ class RadarImageManager: ObservableObject {
                 break
             }
         }
+    }
+    
+    private func cancelForecastFetch() {
+        forecastFetchCancellable?.cancel()
+        forecastFetchCancellable = nil
+        forecastRetryTimer?.invalidate()
+        forecastRetryTimer = nil
+        activeForecastSourceTimestamp = nil
     }
     
     // MARK: - Private Methods
@@ -137,14 +142,14 @@ class RadarImageManager: ObservableObject {
 
         let timestamps = Date.radarTimestamps(count: Constants.Radar.imageCount)
 
+        // Cancel any active forecast fetch BEFORE creating new placeholders
+        // This ensures old network operations don't try to update stale placeholders
+        cancelForecastFetch()
+
         // Create placeholders for all timestamps first (this ensures progress bar shows immediately)
         let forecastOffsets = Constants.Radar.forecastOffsets()
         radarSequence.createPlaceholders(for: timestamps, forecastOffsets: forecastOffsets)
         activeForecastSourceTimestamp = timestamps.first
-        forecastFetchCancellable?.cancel()
-        forecastFetchCancellable = nil
-        forecastRetryTimer?.invalidate()
-        forecastRetryTimer = nil
         
         // Fetch images that we don't already have
         let timestampsToFetch = timestamps.filter { timestamp in
@@ -192,118 +197,118 @@ class RadarImageManager: ObservableObject {
             timestamps: timestamps,
             strategy: .sequential
         )
-        .sink { [weak self] radarResults in
-            self?.processRadarResults(radarResults, attemptedTimestamps: timestamps, wasOnNewest: wasOnNewest)
-        }
+        .sink(
+            receiveCompletion: { [weak self] _ in
+                // When all fetches complete, do final cleanup
+                self?.handleFetchCompletion(attemptedTimestamps: timestamps)
+            },
+            receiveValue: { [weak self] radarResult in
+                // Process each result immediately as it arrives
+                self?.processIndividualResult(radarResult, wasOnNewest: wasOnNewest)
+            }
+        )
         .store(in: &cancellables)
     }
     
-    /// Process radar results and update placeholders
-    private func processRadarResults(_ radarResults: [RadarImageResult], attemptedTimestamps: [Date], wasOnNewest: Bool) {
-        var successCount = 0
-        var fetchErrors: [Error] = []
-
-        for radarResult in radarResults {
-            // Find the placeholder to update
-            if let placeholder = radarSequence.images.first(where: { 
-                $0.kind.isObserved && Calendar.current.isDate($0.timestamp, equalTo: radarResult.timestamp, toGranularity: .minute) 
-            }) {
-                placeholder.endTime = Date()
-                
-                switch radarResult.result {
-                case .success(let image):
-                    radarSequence.updateImage(placeholder, with: image, fromCache: radarResult.wasFromCache)
-                    successCount += 1
-                    
-                    // If user was on newest before fetching, jump to newest available image
-                    if wasOnNewest {
-                        radarSequence.currentImageIndex = 0
-                    }
-                    
-                case .failure(let error):
-                    handleImageFetchError(error, placeholder: placeholder, timestamp: radarResult.timestamp)
-                    fetchErrors.append(error)
-                }
-            } else {
-                logger.error("Received radar result for \(radarResult.timestamp.radarTimestampString) but no matching placeholder found")
-            }
+    /// Process individual result as it arrives (for progressive UI updates)
+    private func processIndividualResult(_ radarResult: RadarImageResult, wasOnNewest: Bool) {
+        // Find the placeholder to update
+        guard let placeholder = radarSequence.images.first(where: { 
+            $0.kind.isObserved && Calendar.current.isDate($0.timestamp, equalTo: radarResult.timestamp, toGranularity: .minute) 
+        }) else {
+            logger.error("Received radar result for \(radarResult.timestamp.radarTimestampString) but no matching placeholder found")
+            return
         }
         
-        // Detect timestamps that never produced a result (still marked as loading)
-        let unresolvedTimestamps = attemptedTimestamps.compactMap { timestamp -> (Date, RadarImageData)? in
+        placeholder.endTime = Date()
+        
+        switch radarResult.result {
+        case .success(let image):
+            radarSequence.updateImage(placeholder, with: image, fromCache: radarResult.wasFromCache)
+            
+            // If user was on newest before fetching, jump to newest available image
+            if wasOnNewest {
+                radarSequence.currentImageIndex = 0
+            }
+            
+            logger.info("Successfully loaded radar image for \(radarResult.timestamp.radarTimestampString) (\(radarResult.wasFromCache ? "cache" : "network"))")
+            
+        case .failure(let error):
+            handleImageFetchError(error, placeholder: placeholder, timestamp: radarResult.timestamp)
+        }
+    }
+    
+    /// Handle completion of all fetch attempts - cleanup and schedule next steps
+    private func handleFetchCompletion(attemptedTimestamps: [Date]) {
+        lastUpdateTime = Date()
+        
+        // Mark any still-loading timestamps as failed (shouldn't happen, but handle edge cases)
+        let unresolvedCount = attemptedTimestamps.filter { timestamp in
             guard let placeholder = radarSequence.images.first(where: {
                 $0.kind.isObserved && Calendar.current.isDate($0.timestamp, equalTo: timestamp, toGranularity: .minute)
-            }) else {
-                return nil
-            }
-            switch placeholder.state {
-            case .loading, .retrying:
-                return (timestamp, placeholder)
-            default:
-                return nil
-            }
-        }
-
-        if !unresolvedTimestamps.isEmpty {
-            for (timestamp, placeholder) in unresolvedTimestamps {
+            }) else { return false }
+            
+            if case .loading = placeholder.state {
                 let error = RadarPipelineError.missingResult(timestamp: timestamp)
                 placeholder.state = .failed(error, attemptCount: placeholder.attemptCount)
                 placeholder.lastError = error
                 placeholder.endTime = Date()
                 logger.error("No network result received for \(timestamp.radarTimestampString); marking as failure")
-                fetchErrors.append(error)
+                return true
             }
-        }
-
-        let retryCandidates = radarSequence.images.compactMap { imageData -> Date? in
-            guard attemptedTimestamps.contains(where: { Calendar.current.isDate($0, equalTo: imageData.timestamp, toGranularity: .minute) }) else {
-                return nil
-            }
-            if case .failed = imageData.state, imageData.shouldRetry {
-                return imageData.timestamp
-            }
-            return nil
-        }
-        
-        let remainingFailures = radarSequence.images.filter { imageData in
-            guard attemptedTimestamps.contains(where: { Calendar.current.isDate($0, equalTo: imageData.timestamp, toGranularity: .minute) }) else {
-                return false
-            }
-            if case .failed = imageData.state, !imageData.shouldRetry {
+            if case .retrying = placeholder.state {
+                let error = RadarPipelineError.missingResult(timestamp: timestamp)
+                placeholder.state = .failed(error, attemptCount: placeholder.attemptCount)
+                placeholder.lastError = error
+                placeholder.endTime = Date()
+                logger.error("No network result received for \(timestamp.radarTimestampString); marking as failure")
                 return true
             }
             return false
+        }.count
+        
+        // Check placeholders to see if we have successes and/or failures
+        let attemptedPlaceholders = radarSequence.images.filter { imageData in
+            attemptedTimestamps.contains(where: { Calendar.current.isDate($0, equalTo: imageData.timestamp, toGranularity: .minute) })
         }
         
-        lastUpdateTime = Date()
+        let hasSuccesses = attemptedPlaceholders.contains { $0.hasSucceeded }
+        let failedCount = attemptedPlaceholders.filter { $0.hasFailed }.count
         
-        if successCount > 0 {
+        // Update UI state
+        if hasSuccesses {
             errorMessage = nil
+            // Start forecast fetch if all observed images are done loading
             if radarSequence.hasLoadingObservedImages == false {
                 startForecastFetchIfNeeded()
             }
-        } else if !fetchErrors.isEmpty {
-            // If observed fetch failed entirely, ensure forecast retry is cancelled
+        } else if failedCount > 0 {
+            errorMessage = "Failed to fetch radar images"
+            // If observed fetch failed entirely, cancel any forecast operations
             forecastFetchCancellable?.cancel()
             forecastFetchCancellable = nil
             forecastRetryTimer?.invalidate()
             forecastRetryTimer = nil
         }
-
+        
+        // Schedule retries for failed images
+        let retryCandidates = attemptedPlaceholders.compactMap { imageData -> Date? in
+            imageData.shouldRetry ? imageData.timestamp : nil
+        }
+        
         if !retryCandidates.isEmpty {
+            let wasOnNewest = (radarSequence.currentImageIndex == 0)
             scheduleIndividualRetry(for: retryCandidates, wasOnNewest: wasOnNewest)
             isLoading = true
         } else {
             isLoading = false
-            if successCount == 0 && !fetchErrors.isEmpty {
-                errorMessage = "Failed to fetch radar images"
-                if !remainingFailures.isEmpty {
-                    scheduleRetry()
-                }
-                logger.error("All radar fetches failed for batch: \(attemptedTimestamps.map { $0.radarTimestampString }.joined(separator: ", ")) – errors: \(fetchErrors.map { $0.localizedDescription }.joined(separator: "; "))")
-            } else if let unresolved = unresolvedTimestamps.first {
-                logger.error("Radar fetch for \(unresolved.0.radarTimestampString) unresolved after processing")
+            if !hasSuccesses && failedCount > 0 {
+                scheduleRetry()
             }
+        }
+        
+        if unresolvedCount > 0 {
+            logger.warning("Detected \(unresolvedCount) unresolved timestamp(s) during fetch completion")
         }
     }
     
@@ -352,8 +357,24 @@ class RadarImageManager: ObservableObject {
     }
 
     private func startForecastFetchIfNeeded(force: Bool = false) {
-        if !force && forecastFetchCancellable != nil { return }
+        // Prevent concurrent forecast fetches for the same source
         guard let newestObserved = radarSequence.newestObservedImage, newestObserved.hasSucceeded else { return }
+        
+        // If already fetching and source hasn't changed, don't start another unless forced
+        if !force {
+            if forecastFetchCancellable != nil {
+                if let activeSource = activeForecastSourceTimestamp,
+                   Calendar.current.isDate(activeSource, equalTo: newestObserved.timestamp, toGranularity: .minute) {
+                    return // Already fetching for this source
+                }
+                // Different source, cancel old fetch
+                cancelForecastFetch()
+            }
+        } else {
+            // Force means cancel everything and restart
+            cancelForecastFetch()
+        }
+        
         guard radarSequence.hasLoadingObservedImages == false else { return }
 
         let forecastPlaceholders = radarSequence.forecastImages(for: newestObserved.timestamp)
@@ -364,33 +385,25 @@ class RadarImageManager: ObservableObject {
             case .failed where data.shouldRetry:
                 return true
             case .loading, .retrying:
-                return forecastFetchCancellable == nil || force
+                // Should not happen since we cancelled above, but include them
+                return true
             case .success:
-                return force
+                // Never re-fetch successful images, even with force
+                return false
             default:
                 return false
             }
         }
 
         guard !targets.isEmpty else {
-            forecastFetchCancellable = nil
-            forecastRetryTimer?.invalidate()
-            forecastRetryTimer = nil
+            cancelForecastFetch()
             return
         }
 
         activeForecastSourceTimestamp = newestObserved.timestamp
 
         for placeholder in targets {
-            if force {
-                placeholder.image = nil
-                placeholder.startTime = nil
-                placeholder.endTime = nil
-                placeholder.attemptCount = 0
-                placeholder.state = .pending
-                placeholder.lastError = nil
-            }
-
+            // Reset loading/retrying state to pending before starting
             if case .loading = placeholder.state {
                 placeholder.state = .pending
             }
@@ -415,29 +428,14 @@ class RadarImageManager: ObservableObject {
             return
         }
 
-        forecastFetchCancellable = networkService.fetchForecastSequence(sourceTimestamp: newestObserved.timestamp, offsets: offsets)
+        let sourceTimestamp = newestObserved.timestamp
+        forecastFetchCancellable = networkService.fetchForecastSequence(sourceTimestamp: sourceTimestamp, offsets: offsets)
             .sink(
                 receiveCompletion: { [weak self] _ in
-                    self?.forecastFetchCancellable = nil
-                },
-                receiveValue: { [weak self] results in
                     guard let self = self else { return }
-                    for result in results {
-                        guard let placeholder = self.placeholder(for: result) else {
-                            continue
-                        }
-
-                        placeholder.endTime = Date()
-
-                        switch result.result {
-                        case .success(let image):
-                            self.radarSequence.updateImage(placeholder, with: image, fromCache: result.wasFromCache)
-                        case .failure(let error):
-                            self.handleImageFetchError(error, placeholder: placeholder, timestamp: result.timestamp)
-                        }
-                    }
-
-                    let pending = self.radarSequence.forecastImages(for: newestObserved.timestamp).filter { data in
+                    
+                    // Check for pending forecasts on completion
+                    let pending = self.radarSequence.forecastImages(for: sourceTimestamp).filter { data in
                         switch data.state {
                         case .success:
                             return false
@@ -457,6 +455,33 @@ class RadarImageManager: ObservableObject {
                         self.forecastRetryTimer = nil
                     } else {
                         self.scheduleForecastRetry()
+                    }
+                },
+                receiveValue: { [weak self] result in
+                    guard let self = self else { return }
+                    
+                    // Verify we're still working with the same source timestamp
+                    // If source changed (e.g., user hit reload), ignore these results
+                    guard let activeSource = self.activeForecastSourceTimestamp,
+                          Calendar.current.isDate(activeSource, equalTo: sourceTimestamp, toGranularity: .minute) else {
+                        self.logger.notice("Forecast result discarded - source timestamp changed")
+                        return
+                    }
+                    
+                    // Process each forecast result immediately as it arrives
+                    guard let placeholder = self.placeholder(for: result) else {
+                        self.logger.warning("No placeholder found for forecast result: \(result.timestamp.radarTimestampString)")
+                        return
+                    }
+
+                    placeholder.endTime = Date()
+
+                    switch result.result {
+                    case .success(let image):
+                        self.radarSequence.updateImage(placeholder, with: image, fromCache: result.wasFromCache)
+                        self.logger.info("Successfully loaded forecast image for \(result.timestamp.radarTimestampString) (\(result.wasFromCache ? "cache" : "network"))")
+                    case .failure(let error):
+                        self.handleImageFetchError(error, placeholder: placeholder, timestamp: result.timestamp)
                     }
                 }
             )
