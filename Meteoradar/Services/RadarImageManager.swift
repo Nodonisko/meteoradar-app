@@ -74,6 +74,12 @@ class RadarImageManager: ObservableObject {
     }
     
     func refreshRadarImages() {
+        // Cancel all ongoing operations first
+        cancelAllFetches()
+        retryTimer?.invalidate()
+        retryTimer = nil
+        
+        // Start fresh
         fetchLatestRadarImages()
     }
     

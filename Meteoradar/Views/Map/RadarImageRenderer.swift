@@ -51,6 +51,14 @@ class RadarImageRenderer: MKOverlayRenderer {
         
         // Restore graphics state
         context.restoreGState()
+        
+        // Draw hairline border around radar coverage area
+        context.saveGState()
+        let borderWidth: CGFloat = 0.5 / zoomScale  // Scale-independent hairline border
+        context.setStrokeColor(UIColor.black.withAlphaComponent(0.85).cgColor)
+        context.setLineWidth(borderWidth)
+        context.stroke(rect)
+        context.restoreGState()
 
         if let callback = onRenderCompleted {
             DispatchQueue.main.async {

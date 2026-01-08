@@ -11,11 +11,30 @@ import MapKit
 
 struct Constants {
     
+    // MARK: - Image Quality
+    enum ImageQuality: String, CaseIterable, Identifiable {
+        case best = "2x"
+        case lower = "1x"
+        
+        var id: String { rawValue }
+        
+        /// URL suffix to append before .png extension
+        var urlSuffix: String {
+            switch self {
+            case .best: return "2x"
+            case .lower: return ""
+            }
+        }
+    }
+    
     // MARK: - Radar Configuration
     struct Radar {
-        // Base URL pattern for radar images (timestamp will be inserted)
-        static let baseURL = "https://radar.danielsuchy.cz/output/radar_%@_overlay.png"
-        static let forecastBaseURL = "https://radar.danielsuchy.cz/output_forecast/radar_%@_forecast_fct%d_overlay.png"
+        // Default image quality (best = 2x resolution)
+        static let defaultImageQuality: ImageQuality = .best
+        
+        // Base URL pattern for radar images (timestamp will be inserted, suffix comes before .png)
+        static let baseURL = "https://radar.danielsuchy.cz/output/radar_%@_overlay%@.png"
+        static let forecastBaseURL = "https://radar.danielsuchy.cz/output_forecast/radar_%@_forecast_fct%d_overlay%@.png"
         
         // URL parsing pattern - matches any datetime string (YYYYMMDD_HHMM) in the URL
         static let filenamePattern = #"(\d{8}_\d{4})"#
@@ -64,8 +83,12 @@ struct Constants {
             return stride(from: forecastIntervalMinutes, through: forecastHorizonMinutes, by: forecastIntervalMinutes).map { $0 }
         }
         
-        static func forecastURL(for sourceTimestamp: Date, offsetMinutes: Int) -> String {
-            return String(format: forecastBaseURL, sourceTimestamp.radarTimestampString, offsetMinutes)
+        static func forecastURL(for sourceTimestamp: Date, offsetMinutes: Int, quality: ImageQuality) -> String {
+            return String(format: forecastBaseURL, sourceTimestamp.radarTimestampString, offsetMinutes, quality.urlSuffix)
+        }
+        
+        static func observedURL(for timestamp: Date, quality: ImageQuality) -> String {
+            return String(format: baseURL, timestamp.radarTimestampString, quality.urlSuffix)
         }
     }
     

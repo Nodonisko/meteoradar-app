@@ -22,6 +22,18 @@ struct MapViewWithOverlay: UIViewRepresentable {
         mapView.userTrackingMode = .none
         mapView.setRegion(region, animated: false)
         
+        // Hide built-in compass and add custom one in top-left corner
+        mapView.showsCompass = false
+        let compassButton = MKCompassButton(mapView: mapView)
+        compassButton.compassVisibility = .adaptive  // Only shows when map is rotated
+        compassButton.translatesAutoresizingMaskIntoConstraints = false
+        mapView.addSubview(compassButton)
+        
+        NSLayoutConstraint.activate([
+            compassButton.topAnchor.constraint(equalTo: mapView.safeAreaLayoutGuide.topAnchor, constant: 68),
+            compassButton.trailingAnchor.constraint(equalTo: mapView.safeAreaLayoutGuide.trailingAnchor, constant: -16)
+        ])
+        
         // Create ONE radar overlay that we'll keep updating
         let radarOverlay = RadarImageOverlay.createCzechRadarOverlay(
             image: radarImageManager.radarSequence.currentImage,

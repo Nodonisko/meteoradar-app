@@ -41,6 +41,8 @@ struct RadarProgressBar: View {
     @ObservedObject var radarSequence: RadarImageSequence
     @ObservedObject var radarImageManager: RadarImageManager
     
+    @State private var toastMessage: String?
+    @State private var showToast = false
     
     // Create stable snapshot to avoid race conditions (cached)
     private var stableImages: [(id: String, data: RadarImageData)] {
@@ -50,42 +52,71 @@ struct RadarProgressBar: View {
     }
     
     var body: some View {
-        VStack(spacing: 0) {
-            GeometryReader { geometry in
-                HStack(spacing: 8) {
-                    ForEach(stableImages, id: \.id) { item in
-                        ProgressBarBox(
-                            imageData: item.data,
-                            radarSequence: radarSequence,
-                            radarImageManager: radarImageManager
-                        )
-                    }
-                }
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            handleDrag(at: value.location, containerWidth: geometry.size.width)
+        ZStack {
+            VStack(spacing: 0) {
+                GeometryReader { geometry in
+                    HStack(spacing: 8) {
+                        ForEach(stableImages, id: \.id) { item in
+                            ProgressBarBox(
+                                imageData: item.data,
+                                radarSequence: radarSequence,
+                                radarImageManager: radarImageManager,
+                                onErrorTap: { errorMessage in
+                                    showErrorToast(errorMessage)
+                                }
+                            )
                         }
-                )
+                    }
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                handleDrag(at: value.location, containerWidth: geometry.size.width)
+                            }
+                    )
+                }
+                .frame(height: Constants.boxHeight)
+                .padding(.horizontal, Constants.horizontalPadding)
+                .padding(.top, Constants.topPadding)
+                .padding(.bottom, Constants.bottomPadding)
+                
+                // Extra spacing that extends to safe area
+                GeometryReader { geometry in
+                    Color.clear
+                        .frame(height: geometry.safeAreaInsets.bottom)
+                }
+                .frame(height: 0)
             }
-            .frame(height: Constants.boxHeight)
-            .padding(.horizontal, Constants.horizontalPadding)
-            .padding(.top, Constants.topPadding)
-            .padding(.bottom, Constants.bottomPadding)
+            .background(
+                Rectangle()
+                    .fill(Color.black.opacity(0.8))
+                    .cornerRadius(16)
+            )
+            .shadow(color: Constants.shadowColor, radius: Constants.shadowRadius, x: 0, y: Constants.shadowOffsetY)
             
-            // Extra spacing that extends to safe area
-            GeometryReader { geometry in
-                Color.clear
-                    .frame(height: geometry.safeAreaInsets.bottom)
-            }
-            .frame(height: 0)
         }
-        .background(
-            Rectangle()
-                .fill(Color.black.opacity(0.8))
-                .cornerRadius(16)
-        )
-        .shadow(color: Constants.shadowColor, radius: Constants.shadowRadius, x: 0, y: Constants.shadowOffsetY)
+        .overlay(alignment: .top) {
+            // Toast overlay - positioned above the progress bar
+            if showToast, let message = toastMessage {
+                ErrorToastView(message: message)
+                    .offset(y: -70)
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                    .animation(.easeInOut(duration: 0.25), value: showToast)
+            }
+        }
+    }
+    
+    private func showErrorToast(_ message: String) {
+        toastMessage = message
+        withAnimation {
+            showToast = true
+        }
+        
+        // Auto-dismiss after 4 seconds
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+            withAnimation {
+                showToast = false
+            }
+        }
     }
     
     
@@ -148,6 +179,7 @@ struct ProgressBarBox: View {
     @ObservedObject var imageData: RadarImageData
     @ObservedObject var radarSequence: RadarImageSequence
     @ObservedObject var radarImageManager: RadarImageManager
+    var onErrorTap: ((String) -> Void)?
     
     // Capture state at render time to avoid mid-render changes
     private var isCurrentFrame: Bool {
@@ -162,6 +194,11 @@ struct ProgressBarBox: View {
     
     private var isEnabled: Bool {
         imageData.state == .success
+    }
+    
+    private var isFailed: Bool {
+        if case .failed = imageData.state { return true }
+        return false
     }
     
     var body: some View {
@@ -180,11 +217,23 @@ struct ProgressBarBox: View {
                     print("Tap gesture triggered for: \(imageData.timestamp.radarTimestampString)")
                     radarImageManager.userSelectedImage(timestamp: imageData.timestamp)
                     handleSelection()
+                } else if isFailed {
+                    // Show error toast when tapping on failed box
+                    let errorMessage = buildErrorMessage()
+                    onErrorTap?(errorMessage)
                 } else {
                     print("Tap ignored - button not enabled")
                     print("imageDataString: \(imageDataString)")
                 }
             }
+    }
+    
+    private func buildErrorMessage() -> String {
+        if let error = imageData.lastError {
+            return error.localizedDescription
+        } else {
+            return String(localized: "error.unknown")
+        }
     }
     
     private var strokeColor: Color {
@@ -261,6 +310,37 @@ struct ProgressBarButtonStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
             .opacity(configuration.isPressed ? 0.8 : 1.0)
             .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+// Toast view for displaying error messages
+struct ErrorToastView: View {
+    let message: String
+    
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.yellow)
+                .font(.system(size: 16, weight: .semibold))
+            
+            Text(message)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.white)
+                .lineLimit(3)
+                .multilineTextAlignment(.leading)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(red: 0.2, green: 0.2, blue: 0.2))
+                .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.red.opacity(0.5), lineWidth: 1)
+        )
+        .padding(.horizontal, 20)
     }
 }
 

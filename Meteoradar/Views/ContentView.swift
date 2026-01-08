@@ -92,10 +92,9 @@ struct ContentView: View {
                                 .font(.title2)
                                 .foregroundColor(.white)
                                 .frame(width: 50, height: 50)
-                                .background(radarManager.isLoading ? Color.gray : Color.green)
+                                .background(Color.green)
                                 .clipShape(Circle())
                         }
-                        .disabled(radarManager.isLoading)
                     }
                     .padding(.trailing, 20)                    .padding(.bottom, RadarProgressBar.Constants.controlsBottomPadding(gapAboveProgressBar: 16))
                 }
@@ -121,7 +120,7 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
-                .presentationDetents([.medium])
+                .presentationDetents([.medium, .large])
         }
     }
 }

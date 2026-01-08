@@ -25,6 +25,7 @@ final class SettingsService: ObservableObject {
         static let overlayOpacity = "settings.overlayOpacity"
         static let forecastOverlayOpacity = "settings.forecastOverlayOpacity"
         static let radarImageIntervalMinutes = "settings.radarImageIntervalMinutes"
+        static let imageQuality = "settings.imageQuality"
     }
     
     /// Opacity for observed radar frames (0.0 - 1.0)
@@ -52,6 +53,13 @@ final class SettingsService: ObservableObject {
         }
     }
     
+    /// Image quality setting (best = 2x resolution, lower = 1x for slower networks)
+    @Published var imageQuality: Constants.ImageQuality {
+        didSet {
+            defaults.set(imageQuality.rawValue, forKey: Keys.imageQuality)
+        }
+    }
+    
     private init() {
         // Load saved values or use defaults from Constants
         if defaults.object(forKey: Keys.overlayOpacity) != nil {
@@ -73,6 +81,13 @@ final class SettingsService: ObservableObject {
         } else {
             self.radarImageIntervalMinutes = Self.defaultIntervalMinutes
         }
+        
+        if let savedQuality = defaults.string(forKey: Keys.imageQuality),
+           let quality = Constants.ImageQuality(rawValue: savedQuality) {
+            self.imageQuality = quality
+        } else {
+            self.imageQuality = Constants.Radar.defaultImageQuality
+        }
     }
     
     /// Resets all settings to their default values
@@ -80,6 +95,7 @@ final class SettingsService: ObservableObject {
         overlayOpacity = Constants.Radar.overlayAlpha
         forecastOverlayOpacity = Constants.Radar.forecastOverlayAlpha
         radarImageIntervalMinutes = Self.defaultIntervalMinutes
+        imageQuality = Constants.Radar.defaultImageQuality
     }
 }
 

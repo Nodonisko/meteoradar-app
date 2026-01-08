@@ -321,7 +321,7 @@ class RadarImageSequence: ObservableObject {
                 newImages.append(existingObserved)
             } else {
                 // Create new placeholder only if we don't have a successful one
-                let urlString = String(format: Constants.Radar.baseURL, timestamp.radarTimestampString)
+                let urlString = Constants.Radar.observedURL(for: timestamp, quality: SettingsService.shared.imageQuality)
                 let observedData = RadarImageData(
                     timestamp: timestamp,
                     urlString: urlString,
@@ -345,7 +345,7 @@ class RadarImageSequence: ObservableObject {
                     } else {
                         // Create new placeholder only if we don't have a successful one
                         let forecastTimestamp = timestamp.addingTimeInterval(TimeInterval(offset * 60))
-                        let urlString = Constants.Radar.forecastURL(for: timestamp, offsetMinutes: offset)
+                        let urlString = Constants.Radar.forecastURL(for: timestamp, offsetMinutes: offset, quality: SettingsService.shared.imageQuality)
                         let forecastData = RadarImageData(
                             timestamp: forecastTimestamp,
                             urlString: urlString,

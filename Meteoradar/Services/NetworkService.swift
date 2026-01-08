@@ -98,13 +98,14 @@ class NetworkService: NSObject, URLSessionDataDelegate {
             return existingRequest
         }
         
-        // Generate URL for timestamp
+        // Generate URL for timestamp with quality setting
+        let quality = SettingsService.shared.imageQuality
         let urlString: String
         switch kind {
         case .observed:
-            urlString = String(format: Constants.Radar.baseURL, targetTimestamp.radarTimestampString)
+            urlString = Constants.Radar.observedURL(for: targetTimestamp, quality: quality)
         case .forecast(let offset):
-            urlString = Constants.Radar.forecastURL(for: sourceTimestamp, offsetMinutes: offset)
+            urlString = Constants.Radar.forecastURL(for: sourceTimestamp, offsetMinutes: offset, quality: quality)
         }
         guard let url = URL(string: urlString) else {
             logger.error("Invalid radar URL for kind: \(String(describing: kind), privacy: .public), source: \(sourceTimestamp, privacy: .public), target: \(targetTimestamp, privacy: .public)")
@@ -179,6 +180,34 @@ class NetworkService: NSObject, URLSessionDataDelegate {
         }
         .eraseToAnyPublisher()
             .tryMap { data, response -> UIImage in
+                // Check HTTP status code first
+                if let httpResponse = response as? HTTPURLResponse {
+                    let statusCode = httpResponse.statusCode
+                    
+                    // Try to extract error message from response body
+                    let responseMessage: String? = {
+                        guard statusCode >= 400 else { return nil }
+                        // Try to parse as string, limit to first 200 chars to avoid huge messages
+                        if let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                           !text.isEmpty {
+                            return String(text.prefix(200))
+                        }
+                        return nil
+                    }()
+                    
+                    // Handle specific error codes with clear messages
+                    switch statusCode {
+                    case 200..<300:
+                        break // Success, continue to image parsing
+                    case 404:
+                        throw NetworkError.notFound
+                    case 503:
+                        throw NetworkError.serviceUnavailable
+                    default:
+                        throw NetworkError.httpError(statusCode: statusCode, message: responseMessage)
+                    }
+                }
+                
                 guard let image = UIImage(data: data) else {
                     throw NetworkError.invalidImageData
                 }
@@ -305,13 +334,25 @@ class NetworkService: NSObject, URLSessionDataDelegate {
 enum NetworkError: LocalizedError {
     case invalidURL
     case invalidImageData
+    case httpError(statusCode: Int, message: String?)
+    case notFound
+    case serviceUnavailable
     
     var errorDescription: String? {
         switch self {
         case .invalidURL:
-            return "Invalid URL provided"
+            return String(localized: "error.invalid_url")
         case .invalidImageData:
-            return "Failed to create image from data"
+            return String(localized: "error.invalid_image_data")
+        case .httpError(let statusCode, let message):
+            if let message = message, !message.isEmpty {
+                return "Error \(statusCode): \(message)"
+            }
+            return "Error \(statusCode)"
+        case .notFound:
+            return String(localized: "error.not_generated_yet")
+        case .serviceUnavailable:
+            return String(localized: "error.service_unavailable")
         }
     }
 }

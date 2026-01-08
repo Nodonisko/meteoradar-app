@@ -63,6 +63,23 @@ struct SettingsView: View {
                 }
                 
                 Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("settings.image_quality")
+                        Picker("settings.image_quality", selection: $settings.imageQuality) {
+                            Text("settings.quality_best").tag(Constants.ImageQuality.best)
+                            Text("settings.quality_lower").tag(Constants.ImageQuality.lower)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                    }
+                    .padding(.vertical, 4)
+                } header: {
+                    Text("settings.image_quality_section")
+                } footer: {
+                    Text("settings.image_quality_footer")
+                }
+                
+                Section {
                     Button(String(localized: "settings.reset_to_defaults")) {
                         settings.resetToDefaults()
                     }
