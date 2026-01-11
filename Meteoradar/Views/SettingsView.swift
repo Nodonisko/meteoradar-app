@@ -11,6 +11,7 @@ struct SettingsView: View {
     @ObservedObject private var settings = SettingsService.shared
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @State private var showResetConfirmation = false
     
     var body: some View {
         NavigationStack {
@@ -67,8 +68,8 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("settings.image_quality")
                         Picker("settings.image_quality", selection: $settings.imageQuality) {
-                            Text("settings.quality_best").tag(Constants.ImageQuality.best)
                             Text("settings.quality_lower").tag(Constants.ImageQuality.lower)
+                            Text("settings.quality_best").tag(Constants.ImageQuality.best)
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
@@ -99,13 +100,6 @@ struct SettingsView: View {
                 }
                 
                 Section {
-                    Button(String(localized: "settings.reset_to_defaults")) {
-                        settings.resetToDefaults()
-                    }
-                    .foregroundColor(.red)
-                }
-                
-                Section {
                     NavigationLink {
                         AboutView()
                     } label: {
@@ -127,6 +121,23 @@ struct SettingsView: View {
                             Text("settings.contact_us")
                         }
                     }
+                    
+                    Button(role: .destructive) {
+                        showResetConfirmation = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "arrow.counterclockwise")
+                            Text("settings.reset_to_defaults")
+                        }
+                    }
+                } footer: {
+                    Link(destination: URL(string: "https://github.com/Nodonisko")!) {
+                        Text("Made with ❤️ by Daniel Suchý")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .padding(.top, 16)
                 }
             }
             .navigationTitle(String(localized: "settings.title"))
@@ -137,6 +148,17 @@ struct SettingsView: View {
                         dismiss()
                     }
                 }
+            }
+            .alert(
+                String(localized: "settings.reset_confirmation_title"),
+                isPresented: $showResetConfirmation
+            ) {
+                Button(String(localized: "settings.reset_to_defaults"), role: .destructive) {
+                    settings.resetToDefaults()
+                }
+                Button(String(localized: "settings.cancel"), role: .cancel) {}
+            } message: {
+                Text("settings.reset_confirmation_message")
             }
         }
     }

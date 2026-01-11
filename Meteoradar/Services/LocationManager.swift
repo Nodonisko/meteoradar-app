@@ -12,6 +12,7 @@ import Combine
 class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     private let locationManager = CLLocationManager()
     @Published var location: CLLocation?
+    @Published var heading: CLHeading?
     @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
     @Published var isUpdatingLocation = false
     
@@ -33,6 +34,13 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         locationManager.delegate = self
         locationManager.desiredAccuracy = Constants.Location.desiredAccuracy
         locationManager.distanceFilter = Constants.Location.distanceFilter
+        
+        // Use last known location immediately (cached from previous sessions)
+        // This shows the dot right away before we get a fresh update
+        if let cachedLocation = locationManager.location {
+            location = cachedLocation
+            print("Using cached location: \(cachedLocation.coordinate.latitude), \(cachedLocation.coordinate.longitude)")
+        }
         
         // Request authorization and get initial location
         locationManager.requestWhenInUseAuthorization()
@@ -103,7 +111,7 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         print("Stopped monitoring significant location changes")
     }
     
-    /// Starts heading updates for compass functionality on map
+    /// Starts heading updates for compass beam on map
     func startHeadingUpdates() {
         guard CLLocationManager.headingAvailable() else {
             print("Heading not available on this device")
@@ -112,7 +120,7 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         
         locationManager.headingFilter = 5 // Update every 5 degrees of change
         locationManager.startUpdatingHeading()
-        print("Started heading updates for compass")
+        print("Started heading updates for compass beam")
     }
     
     /// Stops heading updates
@@ -173,16 +181,23 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             print("Location authorization granted")
             // Get initial location as soon as authorization is granted
             getInitialLocation()
-            // Start heading updates for compass on map
+            // Start heading updates for compass beam
             startHeadingUpdates()
         case .denied, .restricted:
             print("Location authorization denied")
             location = nil
+            heading = nil
         case .notDetermined:
             print("Location authorization not determined")
         @unknown default:
             print("Unknown location authorization status")
         }
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
+        // Only update if we have a valid heading (negative accuracy means invalid)
+        guard newHeading.headingAccuracy >= 0 else { return }
+        heading = newHeading
     }
 }
 

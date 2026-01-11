@@ -75,6 +75,12 @@ class RadarImageManager: ObservableObject {
     }
     
     func refreshRadarImages() {
+        // Stop animation if running
+        stopAnimation()
+        
+        // Jump to latest available frame
+        radarSequence.reset()
+        
         // Cancel all ongoing operations first
         cancelAllFetches()
         retryTimer?.invalidate()

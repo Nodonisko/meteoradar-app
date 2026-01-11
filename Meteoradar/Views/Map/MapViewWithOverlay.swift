@@ -13,12 +13,14 @@ import Combine
 struct MapViewWithOverlay: UIViewRepresentable {
     @Binding var region: MKCoordinateRegion
     @ObservedObject var radarImageManager: RadarImageManager
+    var userLocation: CLLocation?
+    var userHeading: CLHeading?
     
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
         mapView.delegate = context.coordinator
-        mapView.showsUserLocation = true  // Use Apple's native user location with heading
-        mapView.userTrackingMode = .none  // Don't auto-follow, let user pan freely
+        mapView.showsUserLocation = false  // We'll handle user location manually
+        mapView.userTrackingMode = .none
         mapView.setRegion(region, animated: false)
         
         // Store reference for settings changes and apply initial map appearance
@@ -50,6 +52,9 @@ struct MapViewWithOverlay: UIViewRepresentable {
         context.coordinator.radarOverlay = radarOverlay
         mapView.addOverlay(radarOverlay, level: .aboveRoads)
         
+        // Create ONE user location annotation that we'll reuse forever
+        context.coordinator.setupUserLocationAnnotation(on: mapView)
+        
         return mapView
     }
     
@@ -60,6 +65,14 @@ struct MapViewWithOverlay: UIViewRepresentable {
             currentImage: radarImageManager.radarSequence.currentImage,
             timestamp: radarImageManager.radarSequence.currentTimestamp
         )
+        
+        // Update user location annotation coordinate
+        context.coordinator.updateUserLocation(userLocation)
+        
+        // Update heading on the user location annotation
+        if let heading = userHeading, heading.headingAccuracy >= 0 {
+            context.coordinator.updateUserHeading(heading)
+        }
         
         // Update map appearance when setting changes
         applyMapAppearance(to: mapView)
@@ -85,8 +98,10 @@ struct MapViewWithOverlay: UIViewRepresentable {
         var parent: MapViewWithOverlay
         var radarOverlay: RadarImageOverlay?
         var radarRenderer: RadarImageRenderer?
+        var userLocationAnnotation: MKPointAnnotation?
         private var settingsCancellables = Set<AnyCancellable>()
         private weak var mapView: MKMapView?
+        private weak var userLocationView: UserLocationAnnotationView?
         
         init(_ parent: MapViewWithOverlay) {
             self.parent = parent
@@ -130,6 +145,7 @@ struct MapViewWithOverlay: UIViewRepresentable {
             settingsCancellables.removeAll()
             radarRenderer = nil
             radarOverlay = nil
+            userLocationAnnotation = nil
         }
         
         func updateRadarImage(radarImageManager: RadarImageManager, currentImage: UIImage?, timestamp: Date?) {
@@ -143,6 +159,32 @@ struct MapViewWithOverlay: UIViewRepresentable {
             }
             // Trigger a redraw of the renderer
             radarRenderer?.setNeedsDisplay()
+        }
+        
+        func setupUserLocationAnnotation(on mapView: MKMapView) {
+            // Create ONE annotation that we'll reuse forever
+            let annotation = MKPointAnnotation()
+            annotation.title = "Your Location"
+            annotation.coordinate = CLLocationCoordinate2D(latitude: 0, longitude: 0) // Will be updated when we have location
+            mapView.addAnnotation(annotation)
+            userLocationAnnotation = annotation
+        }
+        
+        func updateUserLocation(_ location: CLLocation?) {
+            guard let annotation = userLocationAnnotation else { return }
+            
+            if let location = location {
+                // Just update coordinate - no removal/addition needed
+                annotation.coordinate = location.coordinate
+            }
+            // Note: We don't hide the annotation when location is nil
+            // It will just stay at the last known position
+        }
+        
+        func updateUserHeading(_ heading: CLHeading) {
+            // Use trueHeading if available (requires location), otherwise magneticHeading
+            let headingValue = heading.trueHeading >= 0 ? heading.trueHeading : heading.magneticHeading
+            userLocationView?.updateHeading(headingValue)
         }
         
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
@@ -161,6 +203,33 @@ struct MapViewWithOverlay: UIViewRepresentable {
                 return renderer
             }
             return MKOverlayRenderer(overlay: overlay)
+        }
+        
+        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            // Custom view for our user location annotation with heading beam
+            if annotation === userLocationAnnotation {
+                let identifier = "UserLocationWithHeading"
+                var annotationView = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? UserLocationAnnotationView
+                
+                if annotationView == nil {
+                    annotationView = UserLocationAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+                } else {
+                    annotationView?.annotation = annotation
+                }
+                
+                // Store reference for heading updates
+                userLocationView = annotationView
+                
+                // Apply current heading if available
+                if let heading = parent.userHeading, heading.headingAccuracy >= 0 {
+                    let headingValue = heading.trueHeading >= 0 ? heading.trueHeading : heading.magneticHeading
+                    annotationView?.updateHeading(headingValue)
+                }
+                
+                return annotationView
+            }
+            
+            return nil
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {

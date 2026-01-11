@@ -76,9 +76,20 @@ extension Date {
     ///   - intervalMinutes: Time interval between images in minutes (default: 5)
     /// - Returns: Array of dates in descending chronological order (newest first)
     static func radarTimestamps(count: Int, intervalMinutes: Int = 5) -> [Date] {
-        // Round to the interval boundary, not just 5 minutes
-        // e.g., for 20 min interval at 18:05, start from 18:00 (not 18:05)
-        let latestTime = Date.utcNow.roundedToInterval(minutes: intervalMinutes)
+        // Always start from the nearest 5-minute boundary, regardless of display interval.
+        //
+        // Why: The server generates new radar images every 5 minutes (e.g., 12:00, 12:05, 12:10...).
+        // Forecast files are only kept for the LATEST radar image - older forecasts are deleted.
+        //
+        // Example problem this fixes:
+        //   - Current time: 12:26
+        //   - User selects 20-minute interval
+        //   - Old behavior: Round to 20-min boundary → 12:20, but forecast files for 12:20 are gone
+        //   - New behavior: Round to 5-min boundary → 12:25, forecast files exist
+        //
+        // The display interval only affects how far back we step for historical images.
+        // Since all intervals (5, 10, 15, 20) are multiples of 5, all timestamps remain valid.
+        let latestTime = Date.utcNow.roundedToNearestRadarTime
         let intervalSeconds = Double(intervalMinutes * 60)
         var timestamps: [Date] = []
         

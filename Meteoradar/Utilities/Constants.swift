@@ -38,8 +38,8 @@ struct Constants {
     
     // MARK: - Radar Configuration
     struct Radar {
-        // Default image quality (best = 2x resolution)
-        static let defaultImageQuality: ImageQuality = .best
+        // Default image quality (lower = 1x resolution for faster loading)
+        static let defaultImageQuality: ImageQuality = .lower
         
         // Base URL pattern for radar images (timestamp will be inserted, suffix comes before .png)
         static let baseURL = "https://radar.danielsuchy.cz/output/radar_%@_overlay%@.png"

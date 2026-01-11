@@ -21,6 +21,18 @@ struct AboutView: View {
                 }
                 .padding(.vertical, 8)
             }
+            
+            Section {
+                Link(destination: URL(string: "https://radar.danielsuchy.cz/privacy.html")!) {
+                    HStack {
+                        Text("about.privacy_policy")
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
         }
         .navigationTitle(String(localized: "about.title"))
         .navigationBarTitleDisplayMode(.inline)
