@@ -27,6 +27,15 @@ struct Constants {
         }
     }
     
+    // MARK: - Map Appearance
+    enum MapAppearance: String, CaseIterable, Identifiable {
+        case light
+        case dark
+        case auto
+        
+        var id: String { rawValue }
+    }
+    
     // MARK: - Radar Configuration
     struct Radar {
         // Default image quality (best = 2x resolution)
@@ -55,10 +64,10 @@ struct Constants {
         // Forecast configuration
         static let forecastHorizonMinutes: Int = 60 // Forecast range into future
         static let forecastIntervalMinutes: Int = 10 // Step between forecast frames
-        static let forecastOverlayAlpha: CGFloat = 0.55
 
         // Overlay alpha configuration
         static let overlayAlpha: CGFloat = 0.7
+        static let forecastOverlayAlpha: CGFloat = 0.5
         
         // Cache configuration
         static let cacheEnabled = false // Enable file system caching

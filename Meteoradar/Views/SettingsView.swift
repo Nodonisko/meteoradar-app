@@ -10,6 +10,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject private var settings = SettingsService.shared
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     
     var body: some View {
         NavigationStack {
@@ -80,10 +81,52 @@ struct SettingsView: View {
                 }
                 
                 Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("settings.map_appearance")
+                        Picker("settings.map_appearance", selection: $settings.mapAppearance) {
+                            Text("settings.appearance_light").tag(Constants.MapAppearance.light)
+                            Text("settings.appearance_dark").tag(Constants.MapAppearance.dark)
+                            Text("settings.appearance_auto").tag(Constants.MapAppearance.auto)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                    }
+                    .padding(.vertical, 4)
+                } header: {
+                    Text("settings.map_appearance_section")
+                } footer: {
+                    Text("settings.map_appearance_footer")
+                }
+                
+                Section {
                     Button(String(localized: "settings.reset_to_defaults")) {
                         settings.resetToDefaults()
                     }
                     .foregroundColor(.red)
+                }
+                
+                Section {
+                    NavigationLink {
+                        AboutView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "info.circle")
+                            Text("settings.about")
+                        }
+                    }
+                    
+                    Button {
+                        let subject = String(localized: "settings.email_subject")
+                        if let encodedSubject = subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                           let url = URL(string: "mailto:suchydan@gmail.com?subject=\(encodedSubject)") {
+                            openURL(url)
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "envelope")
+                            Text("settings.contact_us")
+                        }
+                    }
                 }
             }
             .navigationTitle(String(localized: "settings.title"))

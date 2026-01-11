@@ -14,11 +14,16 @@ struct ContentView: View {
     @StateObject private var radarManager = RadarImageManager()
     @State private var region: MKCoordinateRegion
     @State private var showSettings = false
+    @State private var settingsDetent: PresentationDetent
     
     init() {
         // Initialize region from saved state, or use default if no saved state exists
         let savedRegion = MapStateService.shared.loadRegion()
         _region = State(initialValue: savedRegion ?? Constants.Radar.defaultRegion)
+        
+        // Use large detent on iPad, medium on iPhone
+        let isIPad = UIDevice.current.userInterfaceIdiom == .pad
+        _settingsDetent = State(initialValue: isIPad ? .large : .medium)
     }
     
     // Helper function to detect if running in simulator
@@ -30,15 +35,19 @@ struct ContentView: View {
         #endif
     }
     
+    
     var body: some View {
         ZStack {
-            MapViewWithOverlay(region: $region, radarImageManager: radarManager, userLocation: locationManager.location)
+            MapViewWithOverlay(region: $region, radarImageManager: radarManager)
                 .ignoresSafeArea()
             
             // Timestamp display in top left corner, settings button in top right
             VStack {
                 HStack {
-                    RadarTimestampDisplay(timestamp: radarManager.radarSequence.currentTimestamp)
+                    RadarTimestampDisplay(
+                        timestamp: radarManager.radarSequence.currentTimestamp,
+                        isForecast: radarManager.radarSequence.currentImageData?.kind.isForecast ?? false
+                    )
                         .padding(.leading, 16)
                         .padding(.top, 8)
                     
@@ -102,7 +111,7 @@ struct ContentView: View {
             .transition(.opacity)
             
             
-            // Radar Progress Bar at the very bottom (under safe area)
+// Radar Progress Bar at the very bottom (under safe area)
             VStack {
                 Spacer()
                 RadarProgressBar(radarSequence: radarManager.radarSequence, radarImageManager: radarManager)
@@ -120,7 +129,7 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.medium, .large], selection: $settingsDetent)
         }
     }
 }

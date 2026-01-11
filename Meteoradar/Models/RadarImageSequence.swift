@@ -177,6 +177,10 @@ class RadarImageSequence: ObservableObject {
     
     private var cancellables = Set<AnyCancellable>()
     
+    /// Tracks whether current animation started from an observed frame
+    /// Used to determine if animation should loop back after forecasts
+    private var animationStartedFromObserved: Bool = false
+    
     private func setupImageChangeForwarding() {
         // Clear existing subscriptions
         cancellables.removeAll()
@@ -250,13 +254,23 @@ class RadarImageSequence: ObservableObject {
         let current = min(currentImageIndex, available.count - 1)
         let currentFrame = available[current]
         
+        // Track where animation started - affects behavior at end of forecasts
+        animationStartedFromObserved = currentFrame.kind.isObserved
+        
         // Determine where to start based on current position
         if currentFrame.kind.isForecast {
-            // On forecast: find first forecast
-            if let firstForecast = available.firstIndex(where: { $0.kind.isForecast }) {
-                currentImageIndex = firstForecast
-                return true
+            // Check if on last forecast
+            let nextIndex = current + 1
+            let isLastForecast = nextIndex >= available.count || !available[nextIndex].kind.isForecast
+            
+            if isLastForecast {
+                // On last forecast: jump to first forecast
+                if let firstForecast = available.firstIndex(where: { $0.kind.isForecast }) {
+                    currentImageIndex = firstForecast
+                }
             }
+            // else: stay at current forecast position and animate from there
+            return true
         } else {
             // On observed: if on current (0), go to oldest; otherwise stay on current position
             if current == 0, let lastObserved = available.lastIndex(where: { $0.kind.isObserved }) {
@@ -265,8 +279,6 @@ class RadarImageSequence: ObservableObject {
             // else: stay at current position (will animate forward to current)
             return true
         }
-        
-        return false
     }
     
     /// Advances to next frame in animation sequence
@@ -285,16 +297,29 @@ class RadarImageSequence: ObservableObject {
                 return false
             } else {
                 // Reached last forecast
+                if animationStartedFromObserved {
+                    // Animation started from observed: jump back to newest observed and stop
+                    currentImageIndex = 0
+                }
+                // Animation started from forecast: stay on last forecast and stop
                 return true
             }
         } else {
-            // Animating observed: move backward (toward index 0 = current)
+            // Animating observed: move backward (toward index 0 = newest observed)
             if currentImageIndex > 0 {
                 currentImageIndex -= 1
-                // Stop when we reach current (index 0)
-                return currentImageIndex == 0
+                return false  // Continue animating
+            } else {
+                // At index 0 (newest observed)
+                // Check if there are forecast frames to continue to
+                // Forecasts come after ALL observed images in loadedImages array
+                if let firstForecastIndex = available.firstIndex(where: { $0.kind.isForecast }) {
+                    currentImageIndex = firstForecastIndex
+                    return false  // Continue to forecast
+                }
+                // No forecasts available, stop here
+                return true
             }
-            return true
         }
     }
     

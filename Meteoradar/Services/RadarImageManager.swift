@@ -33,6 +33,7 @@ class RadarImageManager: ObservableObject {
     init() {
         setupPublishedForwarding()
         setupSettingsObserver()
+        setupAppLifecycleObserver()
         fetchLatestRadarImages()
         setupUpdateTimer()
     }
@@ -138,6 +139,16 @@ class RadarImageManager: ObservableObject {
                     self.cancelAllFetches()
                     self.fetchLatestRadarImages()
                 }
+            }
+            .store(in: &cancellables)
+    }
+    
+    private func setupAppLifecycleObserver() {
+        NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
+            .dropFirst() // Skip initial activation on app launch (we already fetch in init)
+            .sink { [weak self] _ in
+                self?.logger.info("App became active, refreshing radar images")
+                self?.refreshRadarImages()
             }
             .store(in: &cancellables)
     }

@@ -103,10 +103,29 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         print("Stopped monitoring significant location changes")
     }
     
+    /// Starts heading updates for compass functionality on map
+    func startHeadingUpdates() {
+        guard CLLocationManager.headingAvailable() else {
+            print("Heading not available on this device")
+            return
+        }
+        
+        locationManager.headingFilter = 5 // Update every 5 degrees of change
+        locationManager.startUpdatingHeading()
+        print("Started heading updates for compass")
+    }
+    
+    /// Stops heading updates
+    func stopHeadingUpdates() {
+        locationManager.stopUpdatingHeading()
+        print("Stopped heading updates")
+    }
+    
     /// Stops any ongoing location updates
     func stopLocationUpdates() {
         locationManager.stopUpdatingLocation()
         stopSignificantLocationMonitoring()
+        stopHeadingUpdates()
         locationManager.delegate = nil
         isUpdatingLocation = false
         locationCompletionHandler = nil
@@ -154,6 +173,8 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             print("Location authorization granted")
             // Get initial location as soon as authorization is granted
             getInitialLocation()
+            // Start heading updates for compass on map
+            startHeadingUpdates()
         case .denied, .restricted:
             print("Location authorization denied")
             location = nil

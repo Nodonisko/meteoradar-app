@@ -16,6 +16,11 @@ extension RadarProgressBar {
         static let horizontalPadding: CGFloat = 20
         static let boxSpacing: CGFloat = 8
         
+        // iPad-specific layout
+        static let maxWidth: CGFloat = 450  // approximately 1/3 of screen
+        static let iPadBottomPadding: CGFloat = 24
+        static let iPadInternalBottomPadding: CGFloat = 12  // smaller internal padding on iPad
+        
         // Shadow properties
         static let shadowRadius: CGFloat = 6
         static let shadowOffsetY: CGFloat = -2
@@ -77,7 +82,7 @@ struct RadarProgressBar: View {
                 .frame(height: Constants.boxHeight)
                 .padding(.horizontal, Constants.horizontalPadding)
                 .padding(.top, Constants.topPadding)
-                .padding(.bottom, Constants.bottomPadding)
+                .padding(.bottom, UIDevice.current.userInterfaceIdiom == .pad ? Constants.iPadInternalBottomPadding : Constants.bottomPadding)
                 
                 // Extra spacing that extends to safe area
                 GeometryReader { geometry in
@@ -94,6 +99,8 @@ struct RadarProgressBar: View {
             .shadow(color: Constants.shadowColor, radius: Constants.shadowRadius, x: 0, y: Constants.shadowOffsetY)
             
         }
+        .frame(maxWidth: UIDevice.current.userInterfaceIdiom == .pad ? Constants.maxWidth : .infinity)
+        .padding(.bottom, UIDevice.current.userInterfaceIdiom == .pad ? Constants.iPadBottomPadding : 0)
         .overlay(alignment: .top) {
             // Toast overlay - positioned above the progress bar
             if showToast, let message = toastMessage {
@@ -251,7 +258,7 @@ struct ProgressBarBox: View {
         case .observed:
             return .blue
         case .forecast:
-            return Color.cyan
+            return .orange
         }
     }
     
@@ -260,7 +267,7 @@ struct ProgressBarBox: View {
             return isCurrentFrame ? strokeColor.opacity(0.25) : Color.clear
         }
         if imageData.kind.isForecast {
-            return isCurrentFrame ? Color.cyan.opacity(0.45) : Color.cyan.opacity(0.22)
+            return isCurrentFrame ? Color.orange.opacity(0.45) : Color.orange.opacity(0.22)
         }
         return isCurrentFrame ? Color.blue.opacity(0.45) : Color.blue.opacity(0.15)
     }

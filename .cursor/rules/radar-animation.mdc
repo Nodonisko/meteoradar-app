@@ -13,32 +13,36 @@ alwaysApply: false
 
 The radar sequence contains two types of frames:
 
-1. **Observed frames** - Historical radar images, sorted newest to oldest
-2. **Forecast frames** - Future predictions based on latest observed frame
+1. **Observed frames** - Historical radar images, sorted newest to oldest (index 0 = newest)
+2. **Forecast frames** - Future predictions based on latest observed frame (come after observed in array)
 
 ### Animation Rules
 
 #### Starting Animation from Current Frame (Newest Observed)
 
-When animation starts from the **current frame** (newest observed image):
+When animation starts from the **current frame** (newest observed image, index 0):
 
 - Jump to **oldest observed frame**
-- Animate forward through history to **current frame**
-- Stop at current frame
+- Animate forward through history to **current frame** (index 0)
+- Continue to **forecast frames**
+- Animate through all forecasts to **last forecast**
+- Jump back to **current frame** (index 0) and stop
 
 #### Starting Animation from Historical Frame
 
 When animation starts from any **historical observed frame**:
 
 - Start from that frame
-- Animate forward to **current frame**
-- Stop at current frame
+- Animate forward to **current frame** (index 0)
+- Continue to **forecast frames**
+- Animate through all forecasts to **last forecast**
+- Jump back to **current frame** (index 0) and stop
 
 #### Starting Animation from Forecast Frame
 
 When animation starts from any **forecast frame** (not the last):
 
-- Start from that frame
+- Start from that frame (no jumping)
 - Animate forward through forecasts to **last forecast**
 - Stop at last forecast
 
@@ -52,7 +56,7 @@ When animation starts from the **last forecast frame**:
 
 ### Key Principles
 
-- **SIMPLE**: Animation direction is determined by current frame type
-- **PREDICTABLE**: Always animate toward a logical endpoint
+- **SIMPLE**: Animation direction is determined by current frame type at start
+- **PREDICTABLE**: Observed animations include forecasts and return to current; forecast animations stay in forecasts
 - **NO LOOPS**: Animation stops at endpoint, doesn't loop automatically
-- **STATELESS**: No stored animation ranges, compute behavior on-the-fly
+- **TRACKED ORIGIN**: System tracks whether animation started from observed or forecast to determine end behavior

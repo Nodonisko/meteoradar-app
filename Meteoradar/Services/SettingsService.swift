@@ -26,6 +26,7 @@ final class SettingsService: ObservableObject {
         static let forecastOverlayOpacity = "settings.forecastOverlayOpacity"
         static let radarImageIntervalMinutes = "settings.radarImageIntervalMinutes"
         static let imageQuality = "settings.imageQuality"
+        static let mapAppearance = "settings.mapAppearance"
     }
     
     /// Opacity for observed radar frames (0.0 - 1.0)
@@ -60,6 +61,13 @@ final class SettingsService: ObservableObject {
         }
     }
     
+    /// Map appearance mode (light, dark, or auto following system)
+    @Published var mapAppearance: Constants.MapAppearance {
+        didSet {
+            defaults.set(mapAppearance.rawValue, forKey: Keys.mapAppearance)
+        }
+    }
+    
     private init() {
         // Load saved values or use defaults from Constants
         if defaults.object(forKey: Keys.overlayOpacity) != nil {
@@ -88,6 +96,13 @@ final class SettingsService: ObservableObject {
         } else {
             self.imageQuality = Constants.Radar.defaultImageQuality
         }
+        
+        if let savedAppearance = defaults.string(forKey: Keys.mapAppearance),
+           let appearance = Constants.MapAppearance(rawValue: savedAppearance) {
+            self.mapAppearance = appearance
+        } else {
+            self.mapAppearance = .light
+        }
     }
     
     /// Resets all settings to their default values
@@ -96,6 +111,7 @@ final class SettingsService: ObservableObject {
         forecastOverlayOpacity = Constants.Radar.forecastOverlayAlpha
         radarImageIntervalMinutes = Self.defaultIntervalMinutes
         imageQuality = Constants.Radar.defaultImageQuality
+        mapAppearance = .light
     }
 }
 

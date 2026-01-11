@@ -14,18 +14,18 @@
       }
     },
     "NSLocationWhenInUseUsageDescription" : {
-      "extractionState" : "stale",
+      "extractionState" : "manual",
       "localizations" : {
         "cs" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Vaše poloha se používá k zobrazení radarové mapy ve vaší oblasti."
+            "value" : "Vaše poloha se používá k zobrazení vaší pozice na mapě."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Your location is used to center the radar map on your area."
+            "value" : "Your location is used to show your position on the map."
           }
         }
       }

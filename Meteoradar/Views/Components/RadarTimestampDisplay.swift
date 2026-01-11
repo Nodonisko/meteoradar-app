@@ -9,13 +9,19 @@ import SwiftUI
 
 struct RadarTimestampDisplay: View {
     let timestamp: Date?
+    let isForecast: Bool
+    
+    init(timestamp: Date?, isForecast: Bool = false) {
+        self.timestamp = timestamp
+        self.isForecast = isForecast
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             if let timestamp = timestamp {
                 Text(timestamp.localTimeString)
                     .font(.system(.title2, design: .monospaced, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(isForecast ? Color.orange.opacity(0.75) : .white)
             } else {
                 Text("--:--")
                     .font(.system(.title2, design: .monospaced, weight: .semibold))
@@ -46,6 +52,7 @@ struct RadarTimestampDisplay: View {
         
         VStack(spacing: 20) {
             RadarTimestampDisplay(timestamp: Date())
+            RadarTimestampDisplay(timestamp: Date(), isForecast: true)
             RadarTimestampDisplay(timestamp: nil)
         }
     }
