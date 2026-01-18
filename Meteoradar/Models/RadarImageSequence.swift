@@ -177,10 +177,6 @@ class RadarImageSequence: ObservableObject {
     
     private var cancellables = Set<AnyCancellable>()
     
-    /// Tracks whether current animation started from an observed frame
-    /// Used to determine if animation should loop back after forecasts
-    private var animationStartedFromObserved: Bool = false
-    
     private func setupImageChangeForwarding() {
         // Clear existing subscriptions
         cancellables.removeAll()
@@ -254,9 +250,6 @@ class RadarImageSequence: ObservableObject {
         let current = min(currentImageIndex, available.count - 1)
         let currentFrame = available[current]
         
-        // Track where animation started - affects behavior at end of forecasts
-        animationStartedFromObserved = currentFrame.kind.isObserved
-        
         // Determine where to start based on current position
         if currentFrame.kind.isForecast {
             // Check if on last forecast
@@ -296,12 +289,7 @@ class RadarImageSequence: ObservableObject {
                 currentImageIndex = nextIndex
                 return false
             } else {
-                // Reached last forecast
-                if animationStartedFromObserved {
-                    // Animation started from observed: jump back to newest observed and stop
-                    currentImageIndex = 0
-                }
-                // Animation started from forecast: stay on last forecast and stop
+                // Reached last forecast - stay here and stop
                 return true
             }
         } else {
@@ -310,14 +298,7 @@ class RadarImageSequence: ObservableObject {
                 currentImageIndex -= 1
                 return false  // Continue animating
             } else {
-                // At index 0 (newest observed)
-                // Check if there are forecast frames to continue to
-                // Forecasts come after ALL observed images in loadedImages array
-                if let firstForecastIndex = available.firstIndex(where: { $0.kind.isForecast }) {
-                    currentImageIndex = firstForecastIndex
-                    return false  // Continue to forecast
-                }
-                // No forecasts available, stop here
+                // At index 0 (newest observed) - stop here, don't jump to forecasts
                 return true
             }
         }

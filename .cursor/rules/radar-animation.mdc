@@ -24,9 +24,7 @@ When animation starts from the **current frame** (newest observed image, index 0
 
 - Jump to **oldest observed frame**
 - Animate forward through history to **current frame** (index 0)
-- Continue to **forecast frames**
-- Animate through all forecasts to **last forecast**
-- Jump back to **current frame** (index 0) and stop
+- **Stop at current frame** (do NOT continue to forecasts)
 
 #### Starting Animation from Historical Frame
 
@@ -34,9 +32,7 @@ When animation starts from any **historical observed frame**:
 
 - Start from that frame
 - Animate forward to **current frame** (index 0)
-- Continue to **forecast frames**
-- Animate through all forecasts to **last forecast**
-- Jump back to **current frame** (index 0) and stop
+- **Stop at current frame** (do NOT continue to forecasts)
 
 #### Starting Animation from Forecast Frame
 
@@ -57,6 +53,6 @@ When animation starts from the **last forecast frame**:
 ### Key Principles
 
 - **SIMPLE**: Animation direction is determined by current frame type at start
-- **PREDICTABLE**: Observed animations include forecasts and return to current; forecast animations stay in forecasts
+- **SEPARATED**: Observed and forecast animations are independent - observed animations stay in observed, forecast animations stay in forecasts
 - **NO LOOPS**: Animation stops at endpoint, doesn't loop automatically
-- **TRACKED ORIGIN**: System tracks whether animation started from observed or forecast to determine end behavior
+- **NO CROSS-OVER**: Animation never automatically transitions between observed and forecast frames
