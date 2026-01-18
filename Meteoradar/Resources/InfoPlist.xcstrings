@@ -19,13 +19,13 @@
         "cs" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Vaše poloha se používá k zobrazení vaší pozice na mapě."
+            "value" : "Vaše poloha se zobrazuje na radarové mapě, abyste viděli blížící se déšť a počasí vzhledem k vaší aktuální pozici."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Your location is used to show your position on the map."
+            "value" : "Your location is displayed on the radar map so you can see approaching rain and weather conditions relative to your current position."
           }
         }
       }

@@ -15,13 +15,11 @@ class UserLocationAnnotationView: MKAnnotationView {
     // MARK: - Properties
     
     private let dotSize: CGFloat = 22
-    private let pulseSize: CGFloat = 80
     private let coneLength: CGFloat = 60
     private let coneAngle: CGFloat = 50 // degrees
     
     private var dotView: UIView!
     private var dotInnerView: UIView!
-    private var pulseView: UIView!
     private var headingConeLayer: CAShapeLayer!
     private var headingGradientLayer: CAGradientLayer!
     
@@ -43,7 +41,7 @@ class UserLocationAnnotationView: MKAnnotationView {
     
     private func setupView() {
         // Make the annotation view larger to accommodate the cone
-        let viewSize = max(pulseSize, coneLength * 2 + dotSize)
+        let viewSize = coneLength * 2 + dotSize
         frame = CGRect(x: 0, y: 0, width: viewSize, height: viewSize)
         centerOffset = CGPoint.zero
         
@@ -69,13 +67,6 @@ class UserLocationAnnotationView: MKAnnotationView {
         // Initially hide the cone until we have heading data
         headingGradientLayer.isHidden = true
         
-        // Create pulse view (the expanding ring animation)
-        pulseView = UIView(frame: CGRect(x: 0, y: 0, width: pulseSize, height: pulseSize))
-        pulseView.center = CGPoint(x: bounds.midX, y: bounds.midY)
-        pulseView.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.2)
-        pulseView.layer.cornerRadius = pulseSize / 2
-        addSubview(pulseView)
-        
         // Create the blue dot (outer ring)
         dotView = UIView(frame: CGRect(x: 0, y: 0, width: dotSize, height: dotSize))
         dotView.center = CGPoint(x: bounds.midX, y: bounds.midY)
@@ -94,9 +85,6 @@ class UserLocationAnnotationView: MKAnnotationView {
         dotInnerView.backgroundColor = .systemBlue
         dotInnerView.layer.cornerRadius = innerSize / 2
         dotView.addSubview(dotInnerView)
-        
-        // Start pulse animation
-        startPulseAnimation()
     }
     
     // MARK: - Heading Update
@@ -151,28 +139,9 @@ class UserLocationAnnotationView: MKAnnotationView {
         CATransaction.commit()
     }
     
-    // MARK: - Animations
-    
-    private func startPulseAnimation() {
-        pulseView.alpha = 0.6
-        pulseView.transform = CGAffineTransform(scaleX: 0.5, y: 0.5)
-        
-        UIView.animate(
-            withDuration: 2.0,
-            delay: 0,
-            options: [.repeat, .curveEaseOut],
-            animations: { [weak self] in
-                self?.pulseView.alpha = 0
-                self?.pulseView.transform = CGAffineTransform(scaleX: 1.2, y: 1.2)
-            },
-            completion: nil
-        )
-    }
-    
     // MARK: - Accuracy Circle (optional enhancement)
     
     func updateAccuracy(_ accuracy: CLLocationAccuracy, mapView: MKMapView) {
         // Could add accuracy circle here if needed
-        // For now, just use the pulse animation as a visual indicator
     }
 }

@@ -293,7 +293,7 @@
         }
       }
     },
-    "settings.forecast_opacity" : {
+    "settings.forecast_transparency" : {
       "localizations" : {
         "cs" : {
           "stringUnit" : {
@@ -304,7 +304,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Forecast Opacity"
+            "value" : "Forecast Transparency"
           }
         }
       }
@@ -469,7 +469,7 @@
         }
       }
     },
-    "settings.radar_opacity" : {
+    "settings.radar_transparency" : {
       "localizations" : {
         "cs" : {
           "stringUnit" : {
@@ -480,7 +480,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Radar Opacity"
+            "value" : "Radar Transparency"
           }
         }
       }

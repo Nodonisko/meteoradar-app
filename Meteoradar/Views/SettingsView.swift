@@ -19,25 +19,39 @@ struct SettingsView: View {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text("settings.radar_opacity")
+                            Text("settings.radar_transparency")
                             Spacer()
-                            Text("\(Int(settings.overlayOpacity * 100))%")
+                            Text("\(Int((1 - settings.overlayOpacity) * 100))%")
                                 .foregroundColor(.secondary)
                                 .monospacedDigit()
                         }
-                        Slider(value: $settings.overlayOpacity, in: 0.1...1.0, step: 0.05)
+                        Slider(
+                            value: Binding(
+                                get: { 1 - settings.overlayOpacity },
+                                set: { settings.overlayOpacity = 1 - $0 }
+                            ),
+                            in: 0.0...0.9,
+                            step: 0.05
+                        )
                     }
                     .padding(.vertical, 4)
                     
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text("settings.forecast_opacity")
+                            Text("settings.forecast_transparency")
                             Spacer()
-                            Text("\(Int(settings.forecastOverlayOpacity * 100))%")
+                            Text("\(Int((1 - settings.forecastOverlayOpacity) * 100))%")
                                 .foregroundColor(.secondary)
                                 .monospacedDigit()
                         }
-                        Slider(value: $settings.forecastOverlayOpacity, in: 0.1...1.0, step: 0.05)
+                        Slider(
+                            value: Binding(
+                                get: { 1 - settings.forecastOverlayOpacity },
+                                set: { settings.forecastOverlayOpacity = 1 - $0 }
+                            ),
+                            in: 0.0...0.9,
+                            step: 0.05
+                        )
                     }
                     .padding(.vertical, 4)
                 } header: {
