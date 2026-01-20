@@ -8,9 +8,10 @@ Simplicity and especially **speed became the priority of the whole app** and I d
 
 **There will never be ads in the app and the basic features will always be free.** It is possible that some advanced features will be paid in the future because the server operation costs money.
 
-| | |
-|:---:|:---:|
-| ![App Screenshot 1](https://radar.danielsuchy.cz/assets/app1.png) | ![App Screenshot 2](https://radar.danielsuchy.cz/assets/app2.png) |
+<div align="center">
+  <img src="https://radar.danielsuchy.cz/assets/app1.png" alt="App Screenshot 1" width="45%">
+  <img src="https://radar.danielsuchy.cz/assets/app2.png" alt="App Screenshot 2" width="45%">
+</div>
 
 ## Technical highlights (why it's fast)
 
