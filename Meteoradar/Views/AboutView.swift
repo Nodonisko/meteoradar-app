@@ -35,6 +35,16 @@ struct AboutView: View {
             }
 
             Section {
+                Link(destination: URL(string: "https://github.com/Nodonisko/meteoradar-app")!) {
+                    HStack {
+                        Text("about.github")
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                
                 Link(destination: URL(string: "https://radar.danielsuchy.cz/privacy.html")!) {
                     HStack {
                         Text("about.privacy_policy")

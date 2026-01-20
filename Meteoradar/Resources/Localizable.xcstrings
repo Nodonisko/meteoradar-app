@@ -65,6 +65,22 @@
         }
       }
     },
+    "about.github" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GitHub"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GitHub"
+          }
+        }
+      }
+    },
     "about.privacy_policy" : {
       "localizations" : {
         "cs" : {
