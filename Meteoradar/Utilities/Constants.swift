@@ -54,6 +54,7 @@ struct Constants {
         static let updateInterval: TimeInterval = 300 // 5 minutes in seconds
         static let retryInterval: TimeInterval = 10 // Retry every 10 seconds if image not available
         static let radarImageInterval: TimeInterval = 300 // New radar image every 5 minutes
+        static let serverLatencyOffset: Int = 20 // Seconds to wait after 5-min mark for server to generate images
         
         // Sequential loading configuration
         static let maxRetryAttempts = 5 // Observed frames: initial attempt + one retry

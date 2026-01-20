@@ -145,12 +145,15 @@ struct SettingsView: View {
                         }
                     }
                 } footer: {
-                    Link(destination: URL(string: "https://github.com/Nodonisko")!) {
+                    NavigationLink {
+                        AboutView()
+                    } label: {
                         Text("Made with ❤️ by Daniel Suchý")
                             .font(.caption2)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(.plain)
                     .padding(.top, 16)
                 }
             }

@@ -101,7 +101,7 @@ extension Date {
         return timestamps
     }
     
-    /// Checks if the current time is at a 5-minute interval boundary
+    /// Checks if the current time is at a 5-minute interval boundary (with server latency offset)
     var isRadarUpdateTime: Bool {
         let calendar = Calendar(identifier: .gregorian)
         var utcCalendar = calendar
@@ -111,12 +111,12 @@ extension Date {
         let minute = components.minute ?? 0
         let second = components.second ?? 0
         
-        // Expanded window: check if we're within the first 30 seconds of a 5-minute interval
-        // This gives us a much better chance of catching the update window
-        return (minute % 5 == 0) && (second <= 30)
+        let serverLatencyOffset = Constants.Radar.serverLatencyOffset
+        // Check window: serverLatencyOffset to serverLatencyOffset+30 seconds after the 5-minute mark
+        return (minute % 5 == 0) && (second >= serverLatencyOffset) && (second <= serverLatencyOffset + 30)
     }
     
-    /// Returns the number of seconds until the next 5-minute interval
+    /// Returns the number of seconds until the next 5-minute interval check (with server latency offset)
     var secondsUntilNextRadarUpdate: TimeInterval {
         let calendar = Calendar(identifier: .gregorian)
         var utcCalendar = calendar
@@ -126,8 +126,15 @@ extension Date {
         let minute = components.minute ?? 0
         let second = components.second ?? 0
         
+        let serverLatencyOffset = Constants.Radar.serverLatencyOffset
         let minutesUntilNext = 5 - (minute % 5)
-        let secondsUntilNext = (minutesUntilNext * 60) - second
+        // Add serverLatencyOffset to account for server latency
+        var secondsUntilNext = (minutesUntilNext * 60) - second + serverLatencyOffset
+        
+        // If we're already past the serverLatencyOffset mark in the current 5-min window, wait for the next one
+        if secondsUntilNext > 300 {
+            secondsUntilNext -= 300
+        }
         
         return TimeInterval(secondsUntilNext)
     }
