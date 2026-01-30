@@ -71,7 +71,7 @@ struct Constants {
         static let forecastOverlayAlpha: CGFloat = 0.5
         
         // Cache configuration
-        static let cacheEnabled = false // Enable file system caching
+        static let cacheEnabled = true // Enable file system caching
         static let maxCacheSize: Int64 = 50 * 1024 * 1024 // 50MB cache limit
         static let cacheExpirationDays = 7 // Remove cached images older than 7 days
         

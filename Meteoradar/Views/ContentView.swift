@@ -10,6 +10,7 @@ import MapKit
 import CoreLocation
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var locationManager = LocationManager()
     @StateObject private var radarManager = RadarImageManager()
     @State private var region: MKCoordinateRegion
@@ -125,6 +126,18 @@ struct ContentView: View {
                     center: location.coordinate,
                     span: Constants.Location.userLocationSpan
                 )
+            }
+        }
+        .onChange(of: scenePhase) { phase in
+            switch phase {
+            case .active:
+                radarManager.resumeForForeground()
+                locationManager.resumeForForeground()
+            case .inactive, .background:
+                radarManager.pauseForBackground()
+                locationManager.pauseForBackground()
+            @unknown default:
+                break
             }
         }
         .sheet(isPresented: $showSettings) {

@@ -45,6 +45,15 @@ class RadarImageManager: ObservableObject {
     
     // MARK: - Public Methods
     
+    func pauseForBackground() {
+        stopAnimation()
+        stopAllTimers()
+    }
+
+    func resumeForForeground() {
+        setupUpdateTimer()
+    }
+
     func startAnimation() {
         guard !radarSequence.images.isEmpty else { return }
         
@@ -160,10 +169,19 @@ class RadarImageManager: ObservableObject {
     }
 
     private func setupUpdateTimer() {
-        // Simple repeating timer - check every 10 seconds for radar updates
-        updateTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+        scheduleNextUpdateTimer()
+    }
+
+    private func scheduleNextUpdateTimer() {
+        updateTimer?.invalidate()
+
+        let delay = max(1, Date.utcNow.secondsUntilNextRadarUpdate)
+        let timer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
             self?.checkForRadarUpdate()
+            self?.scheduleNextUpdateTimer()
         }
+        timer.tolerance = min(5, delay * 0.1)
+        updateTimer = timer
     }
     
     private func checkForRadarUpdate() {
@@ -275,7 +293,7 @@ class RadarImageManager: ObservableObject {
             if wasOnNewest {
                 radarSequence.currentImageIndex = 0
             }
-            
+
             logger.info("Successfully loaded radar image for \(radarResult.timestamp.radarTimestampString) (\(radarResult.wasFromCache ? "cache" : "network"))")
             
         case .failure(let error):
@@ -562,12 +580,10 @@ class RadarImageManager: ObservableObject {
         setDisplayedTimestamp(timestamp, deferred: false)
     }
 
-
     private func setDisplayedTimestamp(_ timestamp: Date?, deferred: Bool) {
-        guard displayedTimestamp != timestamp else { return }
-
         let updateBlock: () -> Void = { [weak self] in
-            guard let self = self, self.displayedTimestamp != timestamp else { return }
+            guard let self = self else { return }
+            guard self.displayedTimestamp != timestamp else { return }
             self.displayedTimestamp = timestamp
         }
 

@@ -51,7 +51,7 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             getInitialLocation()
         }
     }
-    
+
     // MARK: - Public Methods
     
     /// Requests a one-time location update with completion handler
@@ -137,6 +137,15 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         locationManager.delegate = nil
         isUpdatingLocation = false
         locationCompletionHandler = nil
+    }
+
+    func pauseForBackground() {
+        stopHeadingUpdates()
+    }
+
+    func resumeForForeground() {
+        guard authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways else { return }
+        startHeadingUpdates()
     }
     
     /// Checks if enough time has passed since last update to warrant a new one

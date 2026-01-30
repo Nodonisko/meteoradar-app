@@ -59,12 +59,17 @@ struct MapViewWithOverlay: UIViewRepresentable {
     }
     
     func updateUIView(_ mapView: MKMapView, context: Context) {        
-        // Simply update the radar overlay's image - no removal/addition needed!
-        context.coordinator.updateRadarImage(
-            radarImageManager: radarImageManager,
+        if context.coordinator.shouldUpdateRadar(
             currentImage: radarImageManager.radarSequence.currentImage,
             timestamp: radarImageManager.radarSequence.currentTimestamp
-        )
+        ) {
+            // Simply update the radar overlay's image - no removal/addition needed!
+            context.coordinator.updateRadarImage(
+                radarImageManager: radarImageManager,
+                currentImage: radarImageManager.radarSequence.currentImage,
+                timestamp: radarImageManager.radarSequence.currentTimestamp
+            )
+        }
         
         // Update user location annotation coordinate
         context.coordinator.updateUserLocation(userLocation)
@@ -102,6 +107,8 @@ struct MapViewWithOverlay: UIViewRepresentable {
         private var settingsCancellables = Set<AnyCancellable>()
         private weak var mapView: MKMapView?
         private weak var userLocationView: UserLocationAnnotationView?
+        private var lastRenderedTimestamp: Date?
+        private var lastRenderedImageID: ObjectIdentifier?
         
         init(_ parent: MapViewWithOverlay) {
             self.parent = parent
@@ -235,6 +242,16 @@ struct MapViewWithOverlay: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             parent.region = mapView.region
             MapStateService.shared.saveRegion(mapView.region)
+        }
+
+        func shouldUpdateRadar(currentImage: UIImage?, timestamp: Date?) -> Bool {
+            let currentImageID = currentImage.map { ObjectIdentifier($0) }
+            if lastRenderedTimestamp == timestamp && lastRenderedImageID == currentImageID {
+                return false
+            }
+            lastRenderedTimestamp = timestamp
+            lastRenderedImageID = currentImageID
+            return true
         }
     }
 }
