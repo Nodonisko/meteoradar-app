@@ -16,6 +16,8 @@ struct ContentView: View {
     @State private var region: MKCoordinateRegion
     @State private var showSettings = false
     @State private var settingsDetent: PresentationDetent
+    @State private var showChangelog = false
+    @State private var didCheckChangelog = false
     
     init() {
         // Initialize region from saved state, or use default if no saved state exists
@@ -143,6 +145,20 @@ struct ContentView: View {
         .sheet(isPresented: $showSettings) {
             SettingsView()
                 .presentationDetents([.medium, .large], selection: $settingsDetent)
+        }
+        .onAppear {
+            guard !didCheckChangelog else { return }
+            didCheckChangelog = true
+            
+            if ChangelogService.shared.shouldShowChangelog {
+                showChangelog = true
+                ChangelogService.shared.markChangelogShown()
+            }
+        }
+        .alert("changelog.title", isPresented: $showChangelog) {
+            Button("settings.done") {}
+        } message: {
+            Text("changelog.message")
         }
     }
 }
