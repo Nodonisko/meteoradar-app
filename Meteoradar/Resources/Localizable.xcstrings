@@ -118,13 +118,13 @@
         "cs" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Novinky v této verzi:\n- Vylepšení výkonu\n- Opravy chyb"
+            "value" : "Nové funkce:\n- Podpora widgetu\n\nOpravy chyb:\n- Rychlejší načítání snímků\n- Vylepšení úspory baterie\n- Úprava popisků v nastavení"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "What's new in this version:\n- Performance improvements\n- Bug fixes"
+            "value" : "New features:\n- Widget support\n\nBug fixes:\n- Faster loading of images\n- Battery saving improvements\n- Label improvements in settings"
           }
         }
       }
@@ -398,13 +398,13 @@
         "cs" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nižší kvalita zmenšuje velikost souborů o ~50% s minimálním vizuálním rozdílem. Doporučeno pro pomalé nebo mobilní sítě."
+            "value" : "Standartní kvalita je vhodná pro většinu uživatelů a nejrychlejší načítání. Vyšší kvalita zvýší velikost souborů o ~50% a rozdíl k kvalitě je jen nepatrný (jen pro ty co chtějí maximum detailů)."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lower quality reduces file size by ~50% with minimal visual difference. Recommended for slow or mobile networks."
+            "value" : "Standard quality is suitable for most users and the fastest loading. Higher quality increases file size by ~50% and the difference in quality is only slight (only for those who want maximum detail)."
           }
         }
       }
@@ -532,7 +532,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lower"
+            "value" : "Standart"
           }
         }
       }
@@ -581,6 +581,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Reset to Defaults?"
+          }
+        }
+      }
+    },
+    "review.prompt_no" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spíš ne"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not really"
+          }
+        }
+      }
+    },
+    "review.prompt_title" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Líbí se vám aplikace?"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Do you like the app?"
+          }
+        }
+      }
+    },
+    "review.prompt_yes" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ano"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Yes"
           }
         }
       }

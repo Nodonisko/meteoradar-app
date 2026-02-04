@@ -126,7 +126,7 @@ struct SettingsView: View {
                     Button {
                         let subject = String(localized: "settings.email_subject")
                         if let encodedSubject = subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-                           let url = URL(string: "mailto:suchydan@gmail.com?subject=\(encodedSubject)") {
+                           let url = URL(string: "mailto:\(Constants.App.supportEmail)?subject=\(encodedSubject)") {
                             openURL(url)
                         }
                     } label: {

@@ -11,6 +11,11 @@ import MapKit
 
 struct Constants {
     
+    // MARK: - App
+    struct App {
+        static let supportEmail = "suchydan@gmail.com"
+    }
+    
     // MARK: - Image Quality
     enum ImageQuality: String, CaseIterable, Identifiable {
         case best = "2x"

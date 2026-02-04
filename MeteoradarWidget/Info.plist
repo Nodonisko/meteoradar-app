@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Your location is displayed on the radar map to show weather relative to you.</string>
+	<string>Your location is displayed on the map so you can see approaching rain and weather conditions relative to your current position.</string>
 	<key>NSWidgetWantsLocation</key>
 	<true/>
 	<key>NSExtension</key>

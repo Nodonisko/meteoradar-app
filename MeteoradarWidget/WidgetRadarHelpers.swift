@@ -250,6 +250,8 @@ final class WidgetLocationService: NSObject, CLLocationManagerDelegate {
     func requestLocationIfNeeded() {
         guard !isRequesting else { return }
 
+        guard locationManager.isAuthorizedForWidgetUpdates else { return }
+
         let cached = SharedLocationStore.load()
         let managerLocation = locationManager.location
 
@@ -270,8 +272,6 @@ final class WidgetLocationService: NSObject, CLLocationManagerDelegate {
         }
 
         switch locationManager.authorizationStatus {
-        case .notDetermined:
-            locationManager.requestWhenInUseAuthorization()
         case .authorizedWhenInUse, .authorizedAlways:
             isRequesting = true
             locationManager.requestLocation()
