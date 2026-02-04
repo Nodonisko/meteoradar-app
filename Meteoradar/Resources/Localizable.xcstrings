@@ -113,6 +113,38 @@
         }
       }
     },
+    "changelog.message" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Novinky v této verzi:\n- Vylepšení výkonu\n- Opravy chyb"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What's new in this version:\n- Performance improvements\n- Bug fixes"
+          }
+        }
+      }
+    },
+    "changelog.title" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Co je nového"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What's New"
+          }
+        }
+      }
+    },
     "error.invalid_image_data" : {
       "localizations" : {
         "cs" : {
@@ -629,6 +661,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Settings"
+          }
+        }
+      }
+    },
+    "widget.usage_message" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Widget se snaží aktualizovat každých 5 minut, ale iOS může aktualizace výrazně omezit (např. jen párkrát denně) kvůli úspoře baterie.\n\nJak zlepšit aktualizace:\n- Otevřete aplikaci klepnutím na widget\n- Mějte widget na hlavní ploše \n- Otevírejte aplikaci častěji (iOS pak častěji dovolí refresh)"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The widget tries to refresh every 5 minutes, but iOS may heavily throttle widget updates (sometimes down to just a few times per day) to save battery.\n\nHow to improve refresh frequency:\n- Tap the widget to open the app\n- Keep the widget on your main Home Screen \n- Open the app often (iOS is more likely to allow refresh)"
+          }
+        }
+      }
+    },
+    "widget.usage_title" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Widget aktivní"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Widget Enabled"
           }
         }
       }

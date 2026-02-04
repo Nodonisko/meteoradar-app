@@ -42,19 +42,19 @@ struct Constants {
         static let defaultImageQuality: ImageQuality = .lower
         
         // Base URL pattern for radar images (timestamp will be inserted, suffix comes before .png)
-        static let baseURL = "https://radar.danielsuchy.cz/output/radar_%@_overlay%@.png"
-        static let forecastBaseURL = "https://radar.danielsuchy.cz/output_forecast/radar_%@_forecast_fct%d_overlay%@.png"
+        static let baseURL = RadarSharedConstants.baseURL
+        static let forecastBaseURL = RadarSharedConstants.forecastBaseURL
         
         // URL parsing pattern - matches any datetime string (YYYYMMDD_HHMM) in the URL
-        static let filenamePattern = #"(\d{8}_\d{4})"#
+        static let filenamePattern = RadarSharedConstants.filenamePattern
         
         // Animation configuration
         static let imageCount = 10 // Number of radar images to fetch and animate
         static let animationInterval: TimeInterval = 0.5 // Seconds between frames for rain movement visualization
         static let updateInterval: TimeInterval = 300 // 5 minutes in seconds
         static let retryInterval: TimeInterval = 10 // Retry every 10 seconds if image not available
-        static let radarImageInterval: TimeInterval = 300 // New radar image every 5 minutes
-        static let serverLatencyOffset: Int = 20 // Seconds to wait after 5-min mark for server to generate images
+        static let radarImageInterval: TimeInterval = RadarSharedConstants.radarIntervalSeconds // New radar image every 5 minutes
+        static let serverLatencyOffset: Int = RadarSharedConstants.serverLatencyOffsetSeconds // Seconds to wait after 5-min mark for server to generate images
         
         // Sequential loading configuration
         static let maxRetryAttempts = 5 // Observed frames: initial attempt + one retry
@@ -105,7 +105,7 @@ struct Constants {
     // MARK: - Network Configuration
     struct Network {
         // Timeout for individual radar image requests (Edge network ~100 Kbps → 20 KB ≈ 2 seconds, but we allow headroom)
-        static let radarRequestTimeout: TimeInterval = 25
+        static let radarRequestTimeout: TimeInterval = RadarSharedConstants.requestTimeout
     }
     
     // MARK: - Location Configuration

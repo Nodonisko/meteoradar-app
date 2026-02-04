@@ -26,36 +26,38 @@ extension ImageCacheService {
     ///   - forecastTimestamp: Forecast timestamp (same as source for observed images)
     /// - Returns: Unique cache key string
     static func cacheKey(for kind: RadarFrameKind, sourceTimestamp: Date, forecastTimestamp: Date) -> String {
+        let quality = SettingsService.shared.imageQuality
+        let urlString: String
         switch kind {
         case .observed:
-            return sourceTimestamp.radarTimestampString
-        case .forecast:
-            return "\(sourceTimestamp.radarTimestampString)-\(forecastTimestamp.radarTimestampString)"
+            urlString = Constants.Radar.observedURL(for: forecastTimestamp, quality: quality)
+        case .forecast(let offset):
+            urlString = Constants.Radar.forecastURL(for: sourceTimestamp, offsetMinutes: offset, quality: quality)
         }
+        guard let url = URL(string: urlString) else {
+            return forecastTimestamp.radarTimestampString
+        }
+        return RadarCacheHelpers.cacheFilename(for: url)
     }
 }
 
 class FileSystemImageCache: ImageCacheService {
     static let shared = FileSystemImageCache()
     
-    private let cacheDirectory: URL
+    private let cacheDirectory: URL?
     private let fileManager = FileManager.default
     private let queue = DispatchQueue(label: "com.meteoradar.imagecache", qos: .utility)
     
     private init() {
-        // Create cache directory in Documents/ImageCache
-        let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
-        cacheDirectory = documentsPath.appendingPathComponent("ImageCache")
-        
-        // Create directory if it doesn't exist
-        try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+        cacheDirectory = RadarCacheHelpers.cacheDirectoryURL(fileManager: fileManager)
         
         // Clean up old cache files on init
         cleanupExpiredCache()
     }
     
     func cachedImage(for key: String) -> UIImage? {
-        let fileURL = cacheDirectory.appendingPathComponent("\(key).png")
+        guard let cacheDirectory else { return nil }
+        let fileURL = cacheDirectory.appendingPathComponent(key)
         
         guard fileManager.fileExists(atPath: fileURL.path) else {
             return nil
@@ -80,8 +82,9 @@ class FileSystemImageCache: ImageCacheService {
     func cacheImage(_ image: UIImage, for key: String) {
         queue.async { [weak self] in
             guard let self = self else { return }
+            guard let cacheDirectory = self.cacheDirectory else { return }
             
-            let fileURL = self.cacheDirectory.appendingPathComponent("\(key).png")
+            let fileURL = cacheDirectory.appendingPathComponent(key)
             
             guard let data = image.pngData() else {
                 print("Failed to convert image to PNG data for key: \(key)")
@@ -100,8 +103,9 @@ class FileSystemImageCache: ImageCacheService {
     func removeCachedImage(for key: String) {
         queue.async { [weak self] in
             guard let self = self else { return }
+            guard let cacheDirectory = self.cacheDirectory else { return }
             
-            let fileURL = self.cacheDirectory.appendingPathComponent("\(key).png")
+            let fileURL = cacheDirectory.appendingPathComponent(key)
             
             do {
                 try self.fileManager.removeItem(at: fileURL)
@@ -115,9 +119,10 @@ class FileSystemImageCache: ImageCacheService {
     func clearCache() {
         queue.async { [weak self] in
             guard let self = self else { return }
+            guard let cacheDirectory = self.cacheDirectory else { return }
             
             do {
-                let contents = try self.fileManager.contentsOfDirectory(at: self.cacheDirectory, includingPropertiesForKeys: nil)
+                let contents = try self.fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: nil)
                 
                 for fileURL in contents {
                     try self.fileManager.removeItem(at: fileURL)
@@ -131,6 +136,7 @@ class FileSystemImageCache: ImageCacheService {
     }
     
     func cacheSize() -> Int64 {
+        guard let cacheDirectory else { return 0 }
         var totalSize: Int64 = 0
         
         do {
@@ -148,7 +154,8 @@ class FileSystemImageCache: ImageCacheService {
     }
     
     func isCached(key: String) -> Bool {
-        let fileURL = cacheDirectory.appendingPathComponent("\(key).png")
+        guard let cacheDirectory else { return false }
+        let fileURL = cacheDirectory.appendingPathComponent(key)
         return fileManager.fileExists(atPath: fileURL.path) && !isCacheExpired(for: fileURL)
     }
     
@@ -171,9 +178,10 @@ class FileSystemImageCache: ImageCacheService {
     private func cleanupExpiredCache() {
         queue.async { [weak self] in
             guard let self = self else { return }
+            guard let cacheDirectory = self.cacheDirectory else { return }
             
             do {
-                let contents = try self.fileManager.contentsOfDirectory(at: self.cacheDirectory, includingPropertiesForKeys: [.contentModificationDateKey])
+                let contents = try self.fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: [.contentModificationDateKey])
                 
                 for fileURL in contents {
                     if self.isCacheExpired(for: fileURL) {
@@ -198,6 +206,7 @@ class FileSystemImageCache: ImageCacheService {
         guard currentSize > maxSize else { return }
         
         do {
+            guard let cacheDirectory else { return }
             let contents = try fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: [.contentModificationDateKey])
             
             // Sort by modification date (oldest first)

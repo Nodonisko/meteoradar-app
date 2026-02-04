@@ -7,10 +7,20 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C32457B32F2EB1B3007D2A5B /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C32457B22F2EB1B2007D2A5B /* WidgetKit.framework */; };
+		C32457B52F2EB1B3007D2A5B /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C32457B42F2EB1B3007D2A5B /* SwiftUI.framework */; };
+		C32457C02F2EB1B4007D2A5B /* MeteoradarWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C32457B02F2EB1B2007D2A5B /* MeteoradarWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		C3F9F6132E81601000951F5D /* RainRadar.icon in Resources */ = {isa = PBXBuildFile; fileRef = C3F9F6122E81601000951F5D /* RainRadar.icon */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		C32457BE2F2EB1B4007D2A5B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C3B298E12E7722FB005DD018 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C32457AF2F2EB1B2007D2A5B;
+			remoteInfo = MeteoradarWidgetExtension;
+		};
 		C3B298FC2E7722FD005DD018 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = C3B298E12E7722FB005DD018 /* Project object */;
@@ -27,14 +37,49 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		C32457C52F2EB1B4007D2A5B /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C32457C02F2EB1B4007D2A5B /* MeteoradarWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		C32457B02F2EB1B2007D2A5B /* MeteoradarWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MeteoradarWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C32457B22F2EB1B2007D2A5B /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		C32457B42F2EB1B3007D2A5B /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		C3B298E92E7722FB005DD018 /* Meteoradar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Meteoradar.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C3B298FB2E7722FD005DD018 /* MeteoradarTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MeteoradarTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C3B299052E7722FD005DD018 /* MeteoradarUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MeteoradarUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C3F9F6122E81601000951F5D /* RainRadar.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = RainRadar.icon; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		C32457C12F2EB1B4007D2A5B /* Exceptions for "MeteoradarWidget" folder in "MeteoradarWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = C32457AF2F2EB1B2007D2A5B /* MeteoradarWidgetExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		C32457B62F2EB1B3007D2A5B /* MeteoradarWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C32457C12F2EB1B4007D2A5B /* Exceptions for "MeteoradarWidget" folder in "MeteoradarWidgetExtension" target */,
+			);
+			path = MeteoradarWidget;
+			sourceTree = "<group>";
+		};
 		C3B298EB2E7722FB005DD018 /* Meteoradar */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Meteoradar;
@@ -50,9 +95,23 @@
 			path = MeteoradarUITests;
 			sourceTree = "<group>";
 		};
+		C3F9F7002F3A111100ABCD01 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		C32457AD2F2EB1B2007D2A5B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C32457B52F2EB1B3007D2A5B /* SwiftUI.framework in Frameworks */,
+				C32457B32F2EB1B3007D2A5B /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		C3B298E62E7722FB005DD018 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -77,12 +136,24 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		C32457B12F2EB1B2007D2A5B /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				C32457B22F2EB1B2007D2A5B /* WidgetKit.framework */,
+				C32457B42F2EB1B3007D2A5B /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		C3B298E02E7722FB005DD018 = {
 			isa = PBXGroup;
 			children = (
 				C3B298EB2E7722FB005DD018 /* Meteoradar */,
 				C3B298FE2E7722FD005DD018 /* MeteoradarTests */,
 				C3B299082E7722FD005DD018 /* MeteoradarUITests */,
+				C32457B62F2EB1B3007D2A5B /* MeteoradarWidget */,
+				C3F9F7002F3A111100ABCD01 /* Shared */,
+				C32457B12F2EB1B2007D2A5B /* Frameworks */,
 				C3B298EA2E7722FB005DD018 /* Products */,
 				C3F9F6122E81601000951F5D /* RainRadar.icon */,
 			);
@@ -94,6 +165,7 @@
 				C3B298E92E7722FB005DD018 /* Meteoradar.app */,
 				C3B298FB2E7722FD005DD018 /* MeteoradarTests.xctest */,
 				C3B299052E7722FD005DD018 /* MeteoradarUITests.xctest */,
+				C32457B02F2EB1B2007D2A5B /* MeteoradarWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -101,6 +173,29 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		C32457AF2F2EB1B2007D2A5B /* MeteoradarWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C32457C22F2EB1B4007D2A5B /* Build configuration list for PBXNativeTarget "MeteoradarWidgetExtension" */;
+			buildPhases = (
+				C32457AC2F2EB1B2007D2A5B /* Sources */,
+				C32457AD2F2EB1B2007D2A5B /* Frameworks */,
+				C32457AE2F2EB1B2007D2A5B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				C32457B62F2EB1B3007D2A5B /* MeteoradarWidget */,
+				C3F9F7002F3A111100ABCD01 /* Shared */,
+			);
+			name = MeteoradarWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = MeteoradarWidgetExtension;
+			productReference = C32457B02F2EB1B2007D2A5B /* MeteoradarWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		C3B298E82E7722FB005DD018 /* Meteoradar */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = C3B2990F2E7722FD005DD018 /* Build configuration list for PBXNativeTarget "Meteoradar" */;
@@ -108,13 +203,16 @@
 				C3B298E52E7722FB005DD018 /* Sources */,
 				C3B298E62E7722FB005DD018 /* Frameworks */,
 				C3B298E72E7722FB005DD018 /* Resources */,
+				C32457C52F2EB1B4007D2A5B /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				C32457BF2F2EB1B4007D2A5B /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				C3B298EB2E7722FB005DD018 /* Meteoradar */,
+				C3F9F7002F3A111100ABCD01 /* Shared */,
 			);
 			name = Meteoradar;
 			packageProductDependencies = (
@@ -176,9 +274,12 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1630;
+				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
+					C32457AF2F2EB1B2007D2A5B = {
+						CreatedOnToolsVersion = 26.0;
+					};
 					C3B298E82E7722FB005DD018 = {
 						CreatedOnToolsVersion = 16.3;
 					};
@@ -210,11 +311,19 @@
 				C3B298E82E7722FB005DD018 /* Meteoradar */,
 				C3B298FA2E7722FD005DD018 /* MeteoradarTests */,
 				C3B299042E7722FD005DD018 /* MeteoradarUITests */,
+				C32457AF2F2EB1B2007D2A5B /* MeteoradarWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		C32457AE2F2EB1B2007D2A5B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		C3B298E72E7722FB005DD018 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -240,6 +349,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		C32457AC2F2EB1B2007D2A5B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		C3B298E52E7722FB005DD018 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -264,6 +380,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		C32457BF2F2EB1B4007D2A5B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C32457AF2F2EB1B2007D2A5B /* MeteoradarWidgetExtension */;
+			targetProxy = C32457BE2F2EB1B4007D2A5B /* PBXContainerItemProxy */;
+		};
 		C3B298FD2E7722FD005DD018 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = C3B298E82E7722FB005DD018 /* Meteoradar */;
@@ -277,6 +398,72 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		C32457C32F2EB1B4007D2A5B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = MeteoradarWidget/MeteoradarWidget.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 7;
+				DEVELOPMENT_TEAM = 45BPJL5U4H;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MeteoradarWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = MeteoradarWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.danielsuchy.meteoradar.MeteoradarWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C32457C42F2EB1B4007D2A5B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = MeteoradarWidget/MeteoradarWidget.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 7;
+				DEVELOPMENT_TEAM = 45BPJL5U4H;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MeteoradarWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = MeteoradarWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.danielsuchy.meteoradar.MeteoradarWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		C3B2990D2E7722FD005DD018 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -406,6 +593,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = RainRadar;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				CODE_SIGN_ENTITLEMENTS = Meteoradar/Meteoradar.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 7;
@@ -441,6 +629,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = RainRadar;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				CODE_SIGN_ENTITLEMENTS = Meteoradar/Meteoradar.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 7;
@@ -541,6 +730,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		C32457C22F2EB1B4007D2A5B /* Build configuration list for PBXNativeTarget "MeteoradarWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C32457C32F2EB1B4007D2A5B /* Debug */,
+				C32457C42F2EB1B4007D2A5B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		C3B298E42E7722FB005DD018 /* Build configuration list for PBXProject "Meteoradar" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

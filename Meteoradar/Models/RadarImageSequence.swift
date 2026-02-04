@@ -83,7 +83,8 @@ class RadarImageData: ObservableObject {
     @Published var isCached: Bool = false
     @Published var cacheDate: Date?
     var cacheKey: String {
-        FileSystemImageCache.cacheKey(for: kind, sourceTimestamp: sourceTimestamp, forecastTimestamp: forecastTimestamp)
+        guard let url = URL(string: urlString) else { return urlString }
+        return RadarCacheHelpers.cacheFilename(for: url)
     }
     
     // Source tracking for debugging/UI

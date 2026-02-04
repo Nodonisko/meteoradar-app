@@ -551,14 +551,11 @@ class RadarImageManager: ObservableObject {
     }
 
     private func placeholder(for result: RadarImageResult) -> RadarImageData? {
-        let targetKey: String
-        switch result.kind {
-        case .observed:
-            targetKey = result.timestamp.radarTimestampString
-        case .forecast:
-            targetKey = "\(result.sourceTimestamp.radarTimestampString)-\(result.timestamp.radarTimestampString)"
-        }
-
+        let targetKey = FileSystemImageCache.cacheKey(
+            for: result.kind,
+            sourceTimestamp: result.sourceTimestamp,
+            forecastTimestamp: result.timestamp
+        )
         return radarSequence.images.first { $0.cacheKey == targetKey }
     }
 

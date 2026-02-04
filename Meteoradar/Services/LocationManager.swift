@@ -164,6 +164,7 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         location = newLocation
         lastLocationUpdate = Date()
         isUpdatingLocation = false
+        SharedLocationStore.save(location: newLocation, timestamp: lastLocationUpdate ?? Date())
         
         // Call completion handler if one exists
         locationCompletionHandler?(.success(newLocation))
@@ -196,6 +197,7 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             print("Location authorization denied")
             location = nil
             heading = nil
+            SharedLocationStore.clear()
         case .notDetermined:
             print("Location authorization not determined")
         @unknown default:

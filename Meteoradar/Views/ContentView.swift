@@ -18,6 +18,7 @@ struct ContentView: View {
     @State private var settingsDetent: PresentationDetent
     @State private var showChangelog = false
     @State private var didCheckChangelog = false
+    @State private var showWidgetUsageMessage = false
     
     init() {
         // Initialize region from saved state, or use default if no saved state exists
@@ -36,6 +37,13 @@ struct ContentView: View {
         #else
         return false
         #endif
+    }
+
+    private func checkWidgetUsageMessage() {
+        guard !showWidgetUsageMessage else { return }
+        if WidgetUsageStore.shouldShowUsageMessage() {
+            showWidgetUsageMessage = true
+        }
     }
     
     
@@ -153,12 +161,21 @@ struct ContentView: View {
             if ChangelogService.shared.shouldShowChangelog {
                 showChangelog = true
                 ChangelogService.shared.markChangelogShown()
+            } else {
+                checkWidgetUsageMessage()
             }
         }
         .alert("changelog.title", isPresented: $showChangelog) {
             Button("settings.done") {}
         } message: {
             Text("changelog.message")
+        }
+        .alert("widget.usage_title", isPresented: $showWidgetUsageMessage) {
+            Button("settings.done") {
+                WidgetUsageStore.markUsageMessageShown()
+            }
+        } message: {
+            Text("widget.usage_message")
         }
     }
 }

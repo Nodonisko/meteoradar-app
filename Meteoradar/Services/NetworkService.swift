@@ -71,24 +71,6 @@ class NetworkService: NSObject, URLSessionDataDelegate {
     }
     
     private func fetchRadarFrame(kind: RadarFrameKind, sourceTimestamp: Date, targetTimestamp: Date, offsetMinutes: Int?) -> AnyPublisher<RadarImageResult, Never> {
-        // Generate cache key using cache service utility
-        let cacheKey = FileSystemImageCache.cacheKey(for: kind, sourceTimestamp: sourceTimestamp, forecastTimestamp: targetTimestamp)
-        
-        // Check cache first if caching is enabled
-        if Constants.Radar.cacheEnabled, let cachedImage = cache.cachedImage(for: cacheKey) {
-            logger.debug("Cache hit for key: \(cacheKey, privacy: .public)")
-            let result = RadarImageResult(
-                timestamp: targetTimestamp,
-                sourceTimestamp: sourceTimestamp,
-                kind: kind,
-                forecastOffsetMinutes: offsetMinutes,
-                result: .success(cachedImage),
-                loadTime: 0,
-                wasFromCache: true
-            )
-            return Just(result).eraseToAnyPublisher()
-        }
-        
         requestLock.lock()
         defer { requestLock.unlock() }
         
@@ -119,6 +101,21 @@ class NetworkService: NSObject, URLSessionDataDelegate {
                 wasFromCache: false
             )
             return Just(errorResult).eraseToAnyPublisher()
+        }
+
+        let cacheKey = RadarCacheHelpers.cacheFilename(for: url)
+        if Constants.Radar.cacheEnabled, let cachedImage = cache.cachedImage(for: cacheKey) {
+            logger.debug("Cache hit for key: \(cacheKey, privacy: .public)")
+            let result = RadarImageResult(
+                timestamp: targetTimestamp,
+                sourceTimestamp: sourceTimestamp,
+                kind: kind,
+                forecastOffsetMinutes: offsetMinutes,
+                result: .success(cachedImage),
+                loadTime: 0,
+                wasFromCache: true
+            )
+            return Just(result).eraseToAnyPublisher()
         }
         
         // Create radar-specific request
@@ -217,7 +214,7 @@ class NetworkService: NSObject, URLSessionDataDelegate {
                 // Cache the successfully downloaded image if caching is enabled
                 guard let self = self else { return }
                 if Constants.Radar.cacheEnabled {
-                    let cacheKey = FileSystemImageCache.cacheKey(for: kind, sourceTimestamp: sourceTimestamp, forecastTimestamp: targetTimestamp)
+                    let cacheKey = RadarCacheHelpers.cacheFilename(for: url)
                     self.cache.cacheImage(image, for: cacheKey)
                     self.logger.debug("Cached image for key: \(cacheKey, privacy: .public)")
                 }
