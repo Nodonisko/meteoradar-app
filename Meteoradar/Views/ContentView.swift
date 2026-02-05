@@ -14,6 +14,7 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var locationManager = LocationManager()
     @StateObject private var radarManager = RadarImageManager()
+    @ObservedObject private var settings = SettingsService.shared
     @State private var region: MKCoordinateRegion
     @State private var showSettings = false
     @State private var settingsDetent: PresentationDetent
@@ -108,7 +109,7 @@ struct ContentView: View {
                 .ignoresSafeArea()
             
             // Timestamp display in top left corner, settings button in top right
-            VStack {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     RadarTimestampDisplay(
                         timestamp: radarManager.radarSequence.currentTimestamp,
@@ -126,7 +127,7 @@ struct ContentView: View {
                             .font(.title2)
                             .foregroundColor(.white)
                             .frame(width: 44, height: 44)
-                            .background(Color.black.opacity(0.5))
+                            .background(Color.black.opacity(0.45))
                             .clipShape(Circle())
                     }
                     .padding(.trailing, 16)
@@ -134,6 +135,19 @@ struct ContentView: View {
                 }
                 
                 Spacer()
+            }
+            
+            if settings.isLegendEnabled {
+                GeometryReader { proxy in
+                    VStack {
+                        Spacer()
+                            .frame(height: proxy.size.height * (UIDevice.current.userInterfaceIdiom == .pad ? 0.67 : 0.45))
+                        RadarLegendView()
+                            .padding(.leading, UIDevice.current.userInterfaceIdiom == .pad ? 16 : 0)
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             
             VStack {

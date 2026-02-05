@@ -7,6 +7,7 @@
 
 import Foundation
 import Combine
+import UIKit
 
 /// Service responsible for persisting and managing app settings
 final class SettingsService: ObservableObject {
@@ -27,6 +28,7 @@ final class SettingsService: ObservableObject {
         static let radarImageIntervalMinutes = "settings.radarImageIntervalMinutes"
         static let imageQuality = "settings.imageQuality"
         static let mapAppearance = "settings.mapAppearance"
+        static let isLegendEnabled = "settings.isLegendEnabled"
     }
     
     /// Opacity for observed radar frames (0.0 - 1.0)
@@ -67,6 +69,13 @@ final class SettingsService: ObservableObject {
             defaults.set(mapAppearance.rawValue, forKey: Keys.mapAppearance)
         }
     }
+
+    /// Show radar legend on the map
+    @Published var isLegendEnabled: Bool {
+        didSet {
+            defaults.set(isLegendEnabled, forKey: Keys.isLegendEnabled)
+        }
+    }
     
     private init() {
         // Load saved values or use defaults from Constants
@@ -103,6 +112,12 @@ final class SettingsService: ObservableObject {
         } else {
             self.mapAppearance = .light
         }
+
+        if defaults.object(forKey: Keys.isLegendEnabled) != nil {
+            self.isLegendEnabled = defaults.bool(forKey: Keys.isLegendEnabled)
+        } else {
+            self.isLegendEnabled = UIDevice.current.userInterfaceIdiom == .pad
+        }
     }
     
     /// Resets all settings to their default values
@@ -112,6 +127,7 @@ final class SettingsService: ObservableObject {
         radarImageIntervalMinutes = Self.defaultIntervalMinutes
         imageQuality = Constants.Radar.defaultImageQuality
         mapAppearance = .light
+        isLegendEnabled = UIDevice.current.userInterfaceIdiom == .pad
     }
 }
 

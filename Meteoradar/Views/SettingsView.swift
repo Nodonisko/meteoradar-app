@@ -107,10 +107,10 @@ struct SettingsView: View {
                         .labelsHidden()
                     }
                     .padding(.vertical, 4)
+                    
+                    Toggle("settings.show_legend", isOn: $settings.isLegendEnabled)
                 } header: {
-                    Text("settings.map_appearance_section")
-                } footer: {
-                    Text("settings.map_appearance_footer")
+                    Text("settings.appearance_section")
                 }
                 
                 Section {
