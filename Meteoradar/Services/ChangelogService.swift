@@ -16,7 +16,10 @@ final class ChangelogService {
         static let lastSeenVersion = "changelog.lastSeenVersion"
     }
     
-    private init() {}
+    private init() {
+        // We don't want to show the changelog to first time users
+        seedLastSeenVersionIfNeeded()
+    }
     
     var currentVersionString: String {
         let shortVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
@@ -35,6 +38,7 @@ final class ChangelogService {
     }
     
     var shouldShowChangelog: Bool {
+        seedLastSeenVersionIfNeeded()
         let current = currentVersionString
         guard !current.isEmpty else { return false }
         let lastSeen = defaults.string(forKey: Keys.lastSeenVersion)
@@ -42,6 +46,13 @@ final class ChangelogService {
     }
     
     func markChangelogShown() {
+        let current = currentVersionString
+        guard !current.isEmpty else { return }
+        defaults.set(current, forKey: Keys.lastSeenVersion)
+    }
+
+    private func seedLastSeenVersionIfNeeded() {
+        guard defaults.string(forKey: Keys.lastSeenVersion) == nil else { return }
         let current = currentVersionString
         guard !current.isEmpty else { return }
         defaults.set(current, forKey: Keys.lastSeenVersion)
