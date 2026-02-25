@@ -17,13 +17,14 @@ struct RadarLegendView: View {
     }
 
     private enum Constants {
-        static let colorWidth: CGFloat = 16
-        static let rowHeight: CGFloat = 12
+        static let colorWidth: CGFloat = 30
+        static let rowHeight: CGFloat = 16
         static let labelSpacing: CGFloat = 6
-        static let dbzColumnMinWidth: CGFloat = 24
         static let mmhColumnMinWidth: CGFloat = 24
         static let cornerRadius: CGFloat = 8
+        static let firstSwatchCornerRadius: CGFloat = 4
         static let padding: CGFloat = 8
+        static let phoneBottomPadding: CGFloat = 5
         static let trailingPadding: CGFloat = 8
         static let backgroundOpacity: CGFloat = 0.7
         static let strokeOpacity: CGFloat = 0.15
@@ -33,23 +34,23 @@ struct RadarLegendView: View {
         static let unitFont = Font.system(size: 9, weight: .medium)
     }
 
-    private let dbzValues = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]
+    private let dbzValues = [60, 56, 52, 48, 44, 40, 36, 32, 28, 24, 20, 16, 12, 8, 4]
     private let colorSteps = [
-        "#390071",
-        "#3001A9",
-        "#0200FB",
-        "#076CBC",
-        "#00A400",
-        "#00BB03",
-        "#36D700",
-        "#9CDD07",
-        "#E0DC01",
-        "#FBB200",
-        "#F78600",
-        "#FF5400",
-        "#FE0100",
+        "#FCFCFC",
         "#A40003",
-        "#FCFCFC"
+        "#FE0100",
+        "#FF5400",
+        "#F78600",
+        "#FBB200",
+        "#E0DC01",
+        "#9CDD07",
+        "#36D700",
+        "#00BB03",
+        "#00A400",
+        "#076CBC",
+        "#0200FB",
+        "#3001A9",
+        "#390071"
     ]
     private let mmhLabels: [Int: String] = [
         4: "0.1",
@@ -77,22 +78,41 @@ struct RadarLegendView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             VStack(spacing: 0) {
-                ForEach(legendSteps) { step in
+                ForEach(Array(legendSteps.enumerated()), id: \.element.id) { index, step in
                     HStack(spacing: Constants.labelSpacing) {
-                        Rectangle()
-                            .fill(step.color)
-                            .frame(width: Constants.colorWidth, height: Constants.rowHeight)
-                            .overlay(
-                                Rectangle()
-                                    .stroke(Color.black.opacity(0.2), lineWidth: 0.5)
-                            )
-
-                        Text("\(step.dbz)")
-                            .font(Constants.dbzFont)
-                            .foregroundColor(.white)
-                            .lineLimit(1)
-                            .layoutPriority(1)
-                            .frame(minWidth: Constants.dbzColumnMinWidth, alignment: .leading)
+                        if index == 0 && !isIPad {
+                            RoundedCornerShape(radius: Constants.firstSwatchCornerRadius, corners: [.topRight])
+                                .fill(step.color)
+                                .frame(width: Constants.colorWidth, height: Constants.rowHeight)
+                                .overlay(
+                                    Text("\(step.dbz)")
+                                        .font(Constants.dbzFont)
+                                        .foregroundColor(step.dbz >= 60 ? .black : .white)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.8)
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                                )
+                                .overlay(
+                                    RoundedCornerShape(radius: Constants.firstSwatchCornerRadius, corners: [.topRight])
+                                        .stroke(Color.black.opacity(0.2), lineWidth: 0.5)
+                                )
+                        } else {
+                            Rectangle()
+                                .fill(step.color)
+                                .frame(width: Constants.colorWidth, height: Constants.rowHeight)
+                                .overlay(
+                                    Text("\(step.dbz)")
+                                        .font(Constants.dbzFont)
+                                        .foregroundColor(step.dbz >= 60 ? .black : .white)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.8)
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                                )
+                                .overlay(
+                                    Rectangle()
+                                        .stroke(Color.black.opacity(0.2), lineWidth: 0.5)
+                                )
+                        }
 
                         if isIPad {
                             Text(step.mmhLabel ?? "")
@@ -113,10 +133,7 @@ struct RadarLegendView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                     .layoutPriority(1)
-                    .frame(
-                        minWidth: Constants.colorWidth + Constants.labelSpacing + Constants.dbzColumnMinWidth,
-                        alignment: .leading
-                    )
+                    .frame(width: Constants.colorWidth, alignment: .center)
 
                 if isIPad {
                     Text("mm/h")
@@ -128,8 +145,9 @@ struct RadarLegendView: View {
                 }
             }
         }
-        .padding(.leading, Constants.padding)
-        .padding(.vertical, Constants.padding)
+        .padding(.leading, isIPad ? Constants.padding : 0)
+        .padding(.top, isIPad ? Constants.padding : 0)
+        .padding(.bottom, isIPad ? Constants.padding : Constants.phoneBottomPadding)
         .padding(.trailing, isIPad ? Constants.trailingPadding : 0)
         .background {
             if isIPad {

@@ -7,7 +7,6 @@
 
 import Foundation
 import Combine
-import UIKit
 
 /// Service responsible for persisting and managing app settings
 final class SettingsService: ObservableObject {
@@ -116,7 +115,7 @@ final class SettingsService: ObservableObject {
         if defaults.object(forKey: Keys.isLegendEnabled) != nil {
             self.isLegendEnabled = defaults.bool(forKey: Keys.isLegendEnabled)
         } else {
-            self.isLegendEnabled = UIDevice.current.userInterfaceIdiom == .pad
+            self.isLegendEnabled = false
         }
     }
     
@@ -127,7 +126,7 @@ final class SettingsService: ObservableObject {
         radarImageIntervalMinutes = Self.defaultIntervalMinutes
         imageQuality = Constants.Radar.defaultImageQuality
         mapAppearance = .light
-        isLegendEnabled = UIDevice.current.userInterfaceIdiom == .pad
+        isLegendEnabled = false
     }
 }
 

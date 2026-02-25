@@ -139,11 +139,15 @@ struct ContentView: View {
             
             if settings.isLegendEnabled {
                 GeometryReader { proxy in
+                    let isIPad = UIDevice.current.userInterfaceIdiom == .pad
+                    let isLandscape = proxy.size.width > proxy.size.height
+                    let legendTopSpacerFactor: CGFloat = isIPad ? (isLandscape ? 0.58 : 0.67) : 0.45
+
                     VStack {
                         Spacer()
-                            .frame(height: proxy.size.height * (UIDevice.current.userInterfaceIdiom == .pad ? 0.67 : 0.45))
+                            .frame(height: proxy.size.height * legendTopSpacerFactor)
                         RadarLegendView()
-                            .padding(.leading, UIDevice.current.userInterfaceIdiom == .pad ? 16 : 0)
+                            .padding(.leading, isIPad ? 16 : 0)
                         Spacer(minLength: 0)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
