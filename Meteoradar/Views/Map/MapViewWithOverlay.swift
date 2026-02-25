@@ -15,6 +15,9 @@ struct MapViewWithOverlay: UIViewRepresentable {
     @ObservedObject var radarImageManager: RadarImageManager
     var userLocation: CLLocation?
     var userHeading: CLHeading?
+    var customMarkers: [CustomMapMarker]
+    var onMapLongPress: (CLLocationCoordinate2D) -> Void
+    var onCustomMarkerTap: (UUID) -> Void
     
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
@@ -54,6 +57,13 @@ struct MapViewWithOverlay: UIViewRepresentable {
         
         // Create ONE user location annotation that we'll reuse forever
         context.coordinator.setupUserLocationAnnotation(on: mapView)
+
+        let longPressGesture = UILongPressGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleMapLongPress(_:))
+        )
+        longPressGesture.minimumPressDuration = 0.6
+        mapView.addGestureRecognizer(longPressGesture)
         
         return mapView
     }
@@ -81,6 +91,9 @@ struct MapViewWithOverlay: UIViewRepresentable {
         
         // Update map appearance when setting changes
         applyMapAppearance(to: mapView)
+
+        // Keep custom markers in sync without recreating unchanged annotations
+        context.coordinator.syncCustomMarkers(customMarkers, on: mapView)
     }
     
     private func applyMapAppearance(to mapView: MKMapView) {
@@ -109,6 +122,7 @@ struct MapViewWithOverlay: UIViewRepresentable {
         private weak var userLocationView: UserLocationAnnotationView?
         private var lastRenderedTimestamp: Date?
         private var lastRenderedImageID: ObjectIdentifier?
+        private var customMarkerAnnotations: [UUID: CustomMapMarkerAnnotation] = [:]
         
         init(_ parent: MapViewWithOverlay) {
             self.parent = parent
@@ -193,6 +207,75 @@ struct MapViewWithOverlay: UIViewRepresentable {
             let headingValue = heading.trueHeading >= 0 ? heading.trueHeading : heading.magneticHeading
             userLocationView?.updateHeading(headingValue)
         }
+
+        func syncCustomMarkers(_ markers: [CustomMapMarker], on mapView: MKMapView) {
+            let incomingById = Dictionary(uniqueKeysWithValues: markers.map { ($0.id, $0) })
+            let existingIds = Set(customMarkerAnnotations.keys)
+            let incomingIds = Set(incomingById.keys)
+
+            let idsToRemove = existingIds.subtracting(incomingIds)
+            for id in idsToRemove {
+                if let annotation = customMarkerAnnotations[id] {
+                    mapView.removeAnnotation(annotation)
+                    customMarkerAnnotations[id] = nil
+                }
+            }
+
+            for marker in markers {
+                if let existingAnnotation = customMarkerAnnotations[marker.id] {
+                    existingAnnotation.update(from: marker)
+                    if let existingView = mapView.view(for: existingAnnotation) as? MKMarkerAnnotationView {
+                        applyCustomMarkerStyle(to: existingView, marker: marker)
+                    }
+                } else {
+                    let annotation = CustomMapMarkerAnnotation(marker: marker)
+                    customMarkerAnnotations[marker.id] = annotation
+                    mapView.addAnnotation(annotation)
+                }
+            }
+        }
+
+        @objc func handleMapLongPress(_ gesture: UILongPressGestureRecognizer) {
+            guard gesture.state == .began, let mapView = mapView else { return }
+            let point = gesture.location(in: mapView)
+
+            if customMarkerID(at: point, on: mapView) != nil {
+                return
+            }
+
+            let coordinate = mapView.convert(point, toCoordinateFrom: mapView)
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            parent.onMapLongPress(coordinate)
+        }
+
+        private func customMarkerID(at point: CGPoint, on mapView: MKMapView) -> UUID? {
+            var touchedView: UIView? = mapView.hitTest(point, with: nil)
+            while let currentView = touchedView {
+                if let annotationView = currentView as? MKAnnotationView,
+                   let annotation = annotationView.annotation as? CustomMapMarkerAnnotation {
+                    return annotation.markerID
+                }
+                touchedView = currentView.superview
+            }
+
+            // Fallback: pick the nearest marker if the touch is close enough.
+            let selectionRadius: CGFloat = 28
+            var nearest: (id: UUID, distance: CGFloat)?
+            for (id, annotation) in customMarkerAnnotations {
+                let markerPoint = mapView.convert(annotation.coordinate, toPointTo: mapView)
+                let distance = hypot(markerPoint.x - point.x, markerPoint.y - point.y)
+                if distance <= selectionRadius {
+                    if let currentNearest = nearest {
+                        if distance < currentNearest.distance {
+                            nearest = (id, distance)
+                        }
+                    } else {
+                        nearest = (id, distance)
+                    }
+                }
+            }
+            return nearest?.id
+        }
         
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             // Handle dimming overlay (areas outside radar coverage)
@@ -235,8 +318,47 @@ struct MapViewWithOverlay: UIViewRepresentable {
                 
                 return annotationView
             }
+
+            if let customAnnotation = annotation as? CustomMapMarkerAnnotation {
+                let identifier = "CustomMarker"
+                let annotationView: MKMarkerAnnotationView
+                if let dequeued = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView {
+                    annotationView = dequeued
+                    annotationView.annotation = customAnnotation
+                } else {
+                    annotationView = MKMarkerAnnotationView(annotation: customAnnotation, reuseIdentifier: identifier)
+                }
+
+                annotationView.canShowCallout = false
+                annotationView.titleVisibility = .hidden
+                annotationView.subtitleVisibility = .hidden
+                annotationView.animatesWhenAdded = true
+                annotationView.displayPriority = .required
+                applyCustomMarkerStyle(to: annotationView, marker: customAnnotation.marker)
+
+                return annotationView
+            }
             
             return nil
+        }
+
+        private func applyCustomMarkerStyle(to annotationView: MKMarkerAnnotationView, marker: CustomMapMarker) {
+            if let glyphImage = UIImage(systemName: marker.glyph) {
+                annotationView.glyphImage = glyphImage
+                annotationView.glyphText = nil
+            } else {
+                annotationView.glyphImage = nil
+                annotationView.glyphText = marker.glyph.isEmpty ? nil : String(marker.glyph.prefix(2))
+            }
+            annotationView.glyphTintColor = .white
+            annotationView.markerTintColor = UIColor(hex: marker.colorHex)
+            annotationView.transform = CGAffineTransform(scaleX: 0.80, y: 0.80)
+        }
+
+        func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
+            guard let customAnnotation = view.annotation as? CustomMapMarkerAnnotation else { return }
+            parent.onCustomMarkerTap(customAnnotation.markerID)
+            mapView.deselectAnnotation(customAnnotation, animated: false)
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
@@ -253,5 +375,28 @@ struct MapViewWithOverlay: UIViewRepresentable {
             lastRenderedImageID = currentImageID
             return true
         }
+    }
+}
+
+private final class CustomMapMarkerAnnotation: NSObject, MKAnnotation {
+    let markerID: UUID
+    dynamic var coordinate: CLLocationCoordinate2D
+    var title: String?
+    var subtitle: String?
+    private(set) var marker: CustomMapMarker
+
+    init(marker: CustomMapMarker) {
+        self.markerID = marker.id
+        self.marker = marker
+        self.coordinate = marker.coordinate
+        self.title = marker.name
+        self.subtitle = nil
+        super.init()
+    }
+
+    func update(from marker: CustomMapMarker) {
+        self.marker = marker
+        coordinate = marker.coordinate
+        title = marker.name
     }
 }

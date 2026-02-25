@@ -25,6 +25,11 @@ struct ContentView: View {
     @State private var wasInBackground = false
     @State private var showReviewPrompt = false
     @State private var didProcessPostPermissionPrompts = false
+    @ObservedObject private var customMarkerService = CustomMapMarkerService.shared
+    @State private var showCreatePinDialog = false
+    @State private var pendingPinCoordinate: CLLocationCoordinate2D?
+    @State private var editingMarkerID: UUID?
+    @State private var newPinDefaultName = "Marker 1"
 
     @Environment(\.requestReview) private var requestReview
     @Environment(\.openURL) private var openURL
@@ -101,11 +106,27 @@ struct ContentView: View {
             checkReviewPrompt()
         }
     }
+
+    private func prepareNewPin(at coordinate: CLLocationCoordinate2D) {
+        pendingPinCoordinate = coordinate
+        newPinDefaultName = customMarkerService.nextDefaultMarkerName
+        showCreatePinDialog = true
+    }
     
     
     var body: some View {
         ZStack {
-            MapViewWithOverlay(region: $region, radarImageManager: radarManager, userLocation: locationManager.location, userHeading: locationManager.heading)
+            MapViewWithOverlay(
+                region: $region,
+                radarImageManager: radarManager,
+                userLocation: locationManager.location,
+                userHeading: locationManager.heading,
+                customMarkers: customMarkerService.markers,
+                onMapLongPress: prepareNewPin(at:),
+                onCustomMarkerTap: { markerID in
+                    editingMarkerID = markerID
+                }
+            )
                 .ignoresSafeArea()
             
             // Timestamp display in top left corner, settings button in top right
@@ -279,6 +300,55 @@ struct ContentView: View {
             Button("review.prompt_no") {
                 ReviewPromptStore.markCompleted()
                 openReviewFeedbackEmail()
+            }
+        }
+        .sheet(isPresented: $showCreatePinDialog) {
+            CreatePinSheetView(
+                defaultName: newPinDefaultName,
+                onCancel: {
+                    pendingPinCoordinate = nil
+                    showCreatePinDialog = false
+                },
+                onSave: { name, colorHex, glyph in
+                    guard let coordinate = pendingPinCoordinate else { return }
+                    customMarkerService.addMarker(
+                        name: name,
+                        coordinate: coordinate,
+                        colorHex: colorHex,
+                        glyph: glyph
+                    )
+                    pendingPinCoordinate = nil
+                    showCreatePinDialog = false
+                }
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: Binding(
+            get: { editingMarkerID != nil },
+            set: { if !$0 { editingMarkerID = nil } }
+        )) {
+            if let markerID = editingMarkerID,
+               let marker = customMarkerService.marker(for: markerID) {
+                EditPinSheetView(
+                    marker: marker,
+                    defaultName: customMarkerService.defaultName(for: markerID),
+                    onDelete: {
+                        customMarkerService.deleteMarker(id: markerID)
+                        editingMarkerID = nil
+                    },
+                    onSave: { name, colorHex, glyph in
+                        customMarkerService.updateMarker(
+                            id: markerID,
+                            name: name,
+                            colorHex: colorHex,
+                            glyph: glyph
+                        )
+                        editingMarkerID = nil
+                    }
+                )
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
             }
         }
     }

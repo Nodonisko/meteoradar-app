@@ -14,3 +14,5 @@ ImageCache/
 
 # Log files
 *.log
+
+.derivedData/
