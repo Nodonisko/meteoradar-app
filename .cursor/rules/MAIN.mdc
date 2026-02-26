@@ -13,3 +13,5 @@ alwaysApply: true
 - I am experienced developer but not familiar with SwiftUI, so please explain me key concepts.
 - Avoid using fallbacks and keeping legacy code.
 - Use modern SwiftUI patterns, we support iOS 16 and newer.
+- Don't hessitate to use UIKit if it produces better results then SwiftUI (faster, more efficient etc.)
+- Always use localizations for all strings.
