@@ -52,12 +52,16 @@ enum WidgetAppearance: String, AppEnum {
 
     private static func widgetBackgroundColor(for interfaceStyle: UIUserInterfaceStyle) -> Color {
         let traitCollection = UITraitCollection(userInterfaceStyle: interfaceStyle)
-        if let uiColor = UIColor(named: "WidgetBackground", in: .main, compatibleWith: traitCollection) {
-            return Color(uiColor: uiColor)
+        let bundle = Bundle(for: WidgetBundleToken.self)
+        if let uiColor = UIColor(named: "WidgetBackground", in: bundle, compatibleWith: traitCollection) {
+            // Resolve to a concrete variant so manual appearance overrides stay stable.
+            return Color(uiColor: uiColor.resolvedColor(with: traitCollection))
         }
         return Color("WidgetBackground")
     }
 }
+
+private final class WidgetBundleToken {}
 
 struct RadarWidgetConfigurationIntent: WidgetConfigurationIntent {
     static var title: LocalizedStringResource = "widget.settings_title"
