@@ -24,6 +24,7 @@ struct MapViewWithOverlay: UIViewRepresentable {
         mapView.delegate = context.coordinator
         mapView.showsUserLocation = false  // We'll handle user location manually
         mapView.userTrackingMode = .none
+        mapView.isRotateEnabled = false
         mapView.setRegion(region, animated: false)
         
         // Store reference for settings changes and apply initial map appearance
