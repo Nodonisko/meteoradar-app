@@ -28,6 +28,34 @@ enum WidgetRadarConstants {
     }
 }
 
+struct WidgetCustomMarker: Identifiable, Decodable {
+    let id: UUID
+    let latitude: Double
+    let longitude: Double
+    let colorHex: String
+
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+
+    var color: Color {
+        Color(uiColor: UIColor.widgetColor(hexRGB: colorHex) ?? .systemRed)
+    }
+}
+
+enum SharedCustomMarkerStore {
+    private static let storageKey = "customMapMarkers.v1"
+
+    static func load() -> [WidgetCustomMarker] {
+        guard let defaults = UserDefaults(suiteName: SharedLocationStore.appGroupID),
+              let data = defaults.data(forKey: storageKey),
+              let markers = try? JSONDecoder().decode([WidgetCustomMarker].self, from: data) else {
+            return []
+        }
+        return markers
+    }
+}
+
 enum WidgetRadarImageLoader {
     static func fetchImage(for timestamp: Date) async -> UIImage? {
         if let cached = loadCachedImage(for: timestamp) {
@@ -352,5 +380,20 @@ extension Date {
         }
 
         return TimeInterval(secondsUntilNext)
+    }
+}
+
+private extension UIColor {
+    static func widgetColor(hexRGB: String) -> UIColor? {
+        let trimmed = hexRGB.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = trimmed.hasPrefix("#") ? String(trimmed.dropFirst()) : trimmed
+        guard normalized.count == 6, let value = Int(normalized, radix: 16) else {
+            return nil
+        }
+
+        let red = CGFloat((value >> 16) & 0xFF) / 255
+        let green = CGFloat((value >> 8) & 0xFF) / 255
+        let blue = CGFloat(value & 0xFF) / 255
+        return UIColor(red: red, green: green, blue: blue, alpha: 1)
     }
 }

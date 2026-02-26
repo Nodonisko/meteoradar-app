@@ -72,6 +72,7 @@ struct RadarEntry: TimelineEntry {
     let radarTimestamp: Date?
     let radarImage: UIImage?
     let userCoordinate: CLLocationCoordinate2D?
+    let customMarkers: [WidgetCustomMarker]
     let isPlaceholder: Bool
     let appearance: WidgetAppearance
 }
@@ -79,12 +80,14 @@ struct RadarEntry: TimelineEntry {
 struct Provider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> RadarEntry {
         let userCoordinate = SharedLocationStore.load()?.coordinate
+        let customMarkers = SharedCustomMarkerStore.load()
         if let cached = WidgetRadarImageLoader.loadLastImage() {
             return RadarEntry(
                 date: Date(),
                 radarTimestamp: cached.timestamp,
                 radarImage: cached.image,
                 userCoordinate: userCoordinate,
+                customMarkers: customMarkers,
                 isPlaceholder: true,
                 appearance: .system
             )
@@ -94,6 +97,7 @@ struct Provider: AppIntentTimelineProvider {
             radarTimestamp: Date.utcNow.roundedToNearestRadarTime,
             radarImage: nil,
             userCoordinate: userCoordinate,
+            customMarkers: customMarkers,
             isPlaceholder: true,
             appearance: .system
         )
@@ -118,6 +122,7 @@ struct Provider: AppIntentTimelineProvider {
         }
         WidgetUsageStore.markWidgetUsed()
         let userCoordinate = SharedLocationStore.load()?.coordinate
+        let customMarkers = SharedCustomMarkerStore.load()
         let latestTimestamp = Date.latestAvailableRadarTimestamp
         if let image = await WidgetRadarImageLoader.fetchImage(for: latestTimestamp) {
             return RadarEntry(
@@ -125,6 +130,7 @@ struct Provider: AppIntentTimelineProvider {
                 radarTimestamp: latestTimestamp,
                 radarImage: image,
                 userCoordinate: userCoordinate,
+                customMarkers: customMarkers,
                 isPlaceholder: false,
                 appearance: appearance
             )
@@ -137,6 +143,7 @@ struct Provider: AppIntentTimelineProvider {
                 radarTimestamp: fallbackTimestamp,
                 radarImage: fallbackImage,
                 userCoordinate: userCoordinate,
+                customMarkers: customMarkers,
                 isPlaceholder: false,
                 appearance: appearance
             )
@@ -148,6 +155,7 @@ struct Provider: AppIntentTimelineProvider {
                 radarTimestamp: cached.timestamp,
                 radarImage: cached.image,
                 userCoordinate: userCoordinate,
+                customMarkers: customMarkers,
                 isPlaceholder: false,
                 appearance: appearance
             )
@@ -157,6 +165,7 @@ struct Provider: AppIntentTimelineProvider {
             radarTimestamp: nil,
             radarImage: nil,
             userCoordinate: userCoordinate,
+            customMarkers: customMarkers,
             isPlaceholder: false,
             appearance: appearance
         )
@@ -261,6 +270,17 @@ struct MeteoradarWidgetEntryView: View {
                     }
                 }
                 .overlay {
+                    ForEach(entry.customMarkers) { marker in
+                        if let point = WidgetRadarLayout.point(
+                            for: marker.coordinate,
+                            containerSize: proxy.size,
+                            imageSize: imageSize,
+                            alignment: imageAlignmentUnitPoint
+                        ) {
+                            MarkerLocationDotView(color: marker.color)
+                                .position(point)
+                        }
+                    }
                     if let coordinate = entry.userCoordinate,
                        let point = WidgetRadarLayout.point(
                         for: coordinate,
@@ -357,15 +377,48 @@ struct WidgetTimestampView: View {
 }
 
 struct LocationDotView: View {
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.widgetFamily) private var family
+
+    private var dotSize: CGFloat {
+        switch family {
+        case .systemExtraLarge:
+            return 10
+        case .systemLarge:
+            return 8
+        default:
+            return 6
+        }
+    }
 
     var body: some View {
         let coreColor = Color(uiColor: .systemRed)
         
         Circle()
             .fill(coreColor)
-            .frame(width: 6, height: 6)
+            .frame(width: dotSize, height: dotSize)
         
+    }
+}
+
+struct MarkerLocationDotView: View {
+    @Environment(\.widgetFamily) private var family
+    let color: Color
+
+    private var dotSize: CGFloat {
+        switch family {
+        case .systemExtraLarge:
+            return 10
+        case .systemLarge:
+            return 8
+        default:
+            return 6
+        }
+    }
+
+    var body: some View {
+        Circle()
+            .fill(color)
+            .frame(width: dotSize, height: dotSize)
     }
 }
 
@@ -429,6 +482,7 @@ struct MeteoradarWidget: Widget {
         radarTimestamp: .now,
         radarImage: nil,
         userCoordinate: CLLocationCoordinate2D(latitude: 50.0755, longitude: 14.4378),
+        customMarkers: [],
         isPlaceholder: true,
         appearance: .system
     )
