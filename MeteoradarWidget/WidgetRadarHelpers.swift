@@ -126,23 +126,32 @@ enum WidgetRadarBounds {
 }
 
 enum WidgetRadarLayout {
+    static func scaledPoint(
+        _ point: CGPoint,
+        in containerSize: CGSize,
+        scale: CGFloat,
+        anchor: UnitPoint
+    ) -> CGPoint {
+        guard scale != 1 else { return point }
+        let anchorPoint = CGPoint(
+            x: containerSize.width * anchor.x,
+            y: containerSize.height * anchor.y
+        )
+        return CGPoint(
+            x: anchorPoint.x + (point.x - anchorPoint.x) * scale,
+            y: anchorPoint.y + (point.y - anchorPoint.y) * scale
+        )
+    }
+
     static func radarImageRect(
         containerSize: CGSize,
         imageSize: CGSize,
-        alignment: UnitPoint,
-        scale: CGFloat,
-        anchor: UnitPoint
+        alignment: UnitPoint
     ) -> CGRect {
-        let baseRect = aspectFillRect(
+        aspectFillRect(
             containerSize: containerSize,
             imageSize: imageSize,
             alignment: alignment
-        )
-        return scaledRect(
-            rect: baseRect,
-            containerSize: containerSize,
-            scale: scale,
-            anchor: anchor
         )
     }
 
@@ -179,35 +188,11 @@ enum WidgetRadarLayout {
         return CGRect(origin: origin, size: filledSize)
     }
 
-    private static func scaledRect(
-        rect: CGRect,
-        containerSize: CGSize,
-        scale: CGFloat,
-        anchor: UnitPoint
-    ) -> CGRect {
-        guard scale != 1 else { return rect }
-        let anchorPoint = CGPoint(
-            x: containerSize.width * anchor.x,
-            y: containerSize.height * anchor.y
-        )
-        let origin = CGPoint(
-            x: anchorPoint.x + (rect.origin.x - anchorPoint.x) * scale,
-            y: anchorPoint.y + (rect.origin.y - anchorPoint.y) * scale
-        )
-        let size = CGSize(
-            width: rect.size.width * scale,
-            height: rect.size.height * scale
-        )
-        return CGRect(origin: origin, size: size)
-    }
-
     static func point(
         for coordinate: CLLocationCoordinate2D,
         containerSize: CGSize,
         imageSize: CGSize,
-        alignment: UnitPoint,
-        scale: CGFloat,
-        anchor: UnitPoint
+        alignment: UnitPoint
     ) -> CGPoint? {
         let bounds = WidgetRadarBounds.self
         let latRange = bounds.northEast.latitude - bounds.southWest.latitude
@@ -222,9 +207,7 @@ enum WidgetRadarLayout {
         let rect = radarImageRect(
             containerSize: containerSize,
             imageSize: imageSize,
-            alignment: alignment,
-            scale: scale,
-            anchor: anchor
+            alignment: alignment
         )
         let x = rect.minX + (rect.width * normalizedX)
         let y = rect.minY + (rect.height * normalizedY)

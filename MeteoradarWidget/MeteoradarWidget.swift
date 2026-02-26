@@ -226,6 +226,19 @@ struct MeteoradarWidgetEntryView: View {
         }
     }
 
+
+    // Keep vertical guide below timestamp pill.
+    private var verticalCrosshairTopInset: CGFloat {
+        switch family {
+        case .systemSmall:
+            return 46
+        case .systemLarge:
+            return 56
+        default:
+            return 0
+        }
+    }
+
     var body: some View {
         let content = GeometryReader { proxy in
             let imageSize = entry.radarImage?.size
@@ -237,8 +250,6 @@ struct MeteoradarWidgetEntryView: View {
                         .resizable()
                         .scaledToFill()
                         .frame(width: proxy.size.width, height: proxy.size.height, alignment: imageAlignment)
-                        .scaleEffect(imageScale, anchor: imageAnchor)
-                        .clipped()
                         .opacity(entry.radarImage == nil ? 0.6 : 1.0)
 
                     if let image = entry.radarImage {
@@ -247,11 +258,22 @@ struct MeteoradarWidgetEntryView: View {
                             .interpolation(.none)
                             .scaledToFill()
                             .frame(width: proxy.size.width, height: proxy.size.height, alignment: imageAlignment)
-                            .scaleEffect(imageScale, anchor: imageAnchor)
-                            .clipped()
+                    }
+                }
+                .overlay {
+                    if let coordinate = entry.userCoordinate,
+                       let point = WidgetRadarLayout.point(
+                        for: coordinate,
+                        containerSize: proxy.size,
+                        imageSize: imageSize,
+                        alignment: imageAlignmentUnitPoint
+                       ) {
+                        LocationDotView()
+                            .position(point)
                     }
                 }
                 .frame(width: proxy.size.width, height: proxy.size.height)
+                .scaleEffect(imageScale, anchor: imageAnchor)
                 .clipped()
 
                 if let coordinate = entry.userCoordinate,
@@ -259,12 +281,19 @@ struct MeteoradarWidgetEntryView: View {
                     for: coordinate,
                     containerSize: proxy.size,
                     imageSize: imageSize,
-                    alignment: imageAlignmentUnitPoint,
-                    scale: imageScale,
-                    anchor: imageAnchor
+                    alignment: imageAlignmentUnitPoint
                    ) {
-                    LocationDotView()
-                        .position(point)
+                    let transformedPoint = WidgetRadarLayout.scaledPoint(
+                        point,
+                        in: proxy.size,
+                        scale: imageScale,
+                        anchor: imageAnchor
+                    )
+                    LocationCrosshairLinesView(
+                        point: transformedPoint,
+                        size: proxy.size,
+                        verticalTopInset: verticalCrosshairTopInset
+                    )
                 }
 
                 WidgetTimestampView(timestamp: entry.radarTimestamp)
@@ -331,12 +360,45 @@ struct LocationDotView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        let coreColor = Color(red: 1.0, green: 0.23, blue: 0.19)
+        let coreColor = Color(uiColor: .systemRed)
         
         Circle()
             .fill(coreColor)
             .frame(width: 6, height: 6)
         
+    }
+}
+
+struct LocationCrosshairLinesView: View {
+    let point: CGPoint
+    let size: CGSize
+    let verticalTopInset: CGFloat
+
+    var body: some View {
+        let clampedVerticalTopInset = min(max(verticalTopInset, 0), size.height)
+        let gapRadius: CGFloat = 5.0
+        let leftX = max(0, point.x - gapRadius)
+        let rightX = min(size.width, point.x + gapRadius)
+        let topY = max(clampedVerticalTopInset, point.y - gapRadius)
+        let bottomY = min(size.height, point.y + gapRadius)
+        Path { path in
+            // Horizontal dashed line with a gap around the user dot.
+            path.move(to: CGPoint(x: 0, y: point.y))
+            path.addLine(to: CGPoint(x: leftX, y: point.y))
+            path.move(to: CGPoint(x: rightX, y: point.y))
+            path.addLine(to: CGPoint(x: size.width, y: point.y))
+
+            // Vertical dashed line with a gap around the user dot.
+            path.move(to: CGPoint(x: point.x, y: clampedVerticalTopInset))
+            path.addLine(to: CGPoint(x: point.x, y: topY))
+            path.move(to: CGPoint(x: point.x, y: bottomY))
+            path.addLine(to: CGPoint(x: point.x, y: size.height))
+        }
+        .stroke(
+            Color.primary.opacity(0.65),
+            style: StrokeStyle(lineWidth: 1, lineCap: .round, dash: [4, 4])
+        )
+        .frame(width: size.width, height: size.height, alignment: .topLeading)
     }
 }
 
