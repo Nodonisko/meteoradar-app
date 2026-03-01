@@ -139,13 +139,13 @@
         "cs" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nové funkce:\n- Podpora widgetu\n\nOpravy chyb:\n- Rychlejší načítání snímků\n- Vylepšení úspory baterie\n- Úprava popisků v nastavení"
+            "value" : "Nové funkce:\n- Legenda intenzity srážek (zapni v nastavení)\n- Vlastní značky na mapě (dlouze podrž na mapě)\n- Města na pozadí widgetu\n- Vlastní značky ve widgetu\n\nVylepšení:\n- Přesnější poloha uživatele ve widgetu\n\nOpravy chyb:\n- Oprava tmavého/světlého režimu widgetu\n- Zákaz rotace mapy"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "New features:\n- Widget support\n\nBug fixes:\n- Faster loading of images\n- Battery saving improvements\n- Label improvements in settings"
+            "value" : "New features:\n- Rain intensity legend (enable in settings)\n- Custom map markers (long press on map)\n- Cities on widget background\n- Custom markers in widget\n\nImprovements:\n- More accurate user position in widget\n\nBug fixes:\n- Fixed widget dark/light mode\n- Locked map rotation"
           }
         }
       }
