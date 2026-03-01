@@ -46,7 +46,7 @@ struct MapViewWithOverlay: UIViewRepresentable {
         // Add dimming overlay first (renders below radar overlay)
         // This darkens areas outside radar coverage
         let dimmingOverlay = DimmingOverlay()
-        mapView.addOverlay(dimmingOverlay, level: .aboveRoads)
+        mapView.addOverlay(dimmingOverlay, level: .aboveLabels)
         
         // Create ONE radar overlay that we'll keep updating
         let radarOverlay = RadarImageOverlay.createCzechRadarOverlay(
@@ -54,7 +54,7 @@ struct MapViewWithOverlay: UIViewRepresentable {
             timestamp: radarImageManager.radarSequence.currentTimestamp
         )
         context.coordinator.radarOverlay = radarOverlay
-        mapView.addOverlay(radarOverlay, level: .aboveRoads)
+        mapView.addOverlay(radarOverlay, level: .aboveLabels)
         
         // Create ONE user location annotation that we'll reuse forever
         context.coordinator.setupUserLocationAnnotation(on: mapView)
@@ -225,8 +225,8 @@ struct MapViewWithOverlay: UIViewRepresentable {
             for marker in markers {
                 if let existingAnnotation = customMarkerAnnotations[marker.id] {
                     existingAnnotation.update(from: marker)
-                    if let existingView = mapView.view(for: existingAnnotation) as? MKMarkerAnnotationView {
-                        applyCustomMarkerStyle(to: existingView, marker: marker)
+                    if let existingView = mapView.view(for: existingAnnotation) as? CustomMarkerDotAnnotationView {
+                        existingView.update(color: UIColor(hex: marker.colorHex), glyph: marker.glyph)
                     }
                 } else {
                     let annotation = CustomMapMarkerAnnotation(marker: marker)
@@ -321,39 +321,22 @@ struct MapViewWithOverlay: UIViewRepresentable {
             }
 
             if let customAnnotation = annotation as? CustomMapMarkerAnnotation {
-                let identifier = "CustomMarker"
-                let annotationView: MKMarkerAnnotationView
-                if let dequeued = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView {
+                let identifier = "CustomMarkerDot"
+                let annotationView: CustomMarkerDotAnnotationView
+                if let dequeued = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? CustomMarkerDotAnnotationView {
                     annotationView = dequeued
                     annotationView.annotation = customAnnotation
                 } else {
-                    annotationView = MKMarkerAnnotationView(annotation: customAnnotation, reuseIdentifier: identifier)
+                    annotationView = CustomMarkerDotAnnotationView(annotation: customAnnotation, reuseIdentifier: identifier)
                 }
 
-                annotationView.canShowCallout = false
-                annotationView.titleVisibility = .hidden
-                annotationView.subtitleVisibility = .hidden
-                annotationView.animatesWhenAdded = true
+                annotationView.update(color: UIColor(hex: customAnnotation.marker.colorHex), glyph: customAnnotation.marker.glyph)
                 annotationView.displayPriority = .required
-                applyCustomMarkerStyle(to: annotationView, marker: customAnnotation.marker)
 
                 return annotationView
             }
             
             return nil
-        }
-
-        private func applyCustomMarkerStyle(to annotationView: MKMarkerAnnotationView, marker: CustomMapMarker) {
-            if let glyphImage = UIImage(systemName: marker.glyph) {
-                annotationView.glyphImage = glyphImage
-                annotationView.glyphText = nil
-            } else {
-                annotationView.glyphImage = nil
-                annotationView.glyphText = marker.glyph.isEmpty ? nil : String(marker.glyph.prefix(2))
-            }
-            annotationView.glyphTintColor = .white
-            annotationView.markerTintColor = UIColor(hex: marker.colorHex)
-            annotationView.transform = CGAffineTransform(scaleX: 0.80, y: 0.80)
         }
 
         func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
@@ -399,5 +382,76 @@ private final class CustomMapMarkerAnnotation: NSObject, MKAnnotation {
         self.marker = marker
         coordinate = marker.coordinate
         title = marker.name
+    }
+}
+
+private final class CustomMarkerDotAnnotationView: MKAnnotationView {
+    /// Single value that controls overall marker size. All proportions derive from this.
+    private static let markerSize: CGFloat = 22
+
+    private let backgroundCircle = CALayer()
+    private let glyphImageView = UIImageView()
+
+    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
+        let size = Self.markerSize
+        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
+        frame = CGRect(x: 0, y: 0, width: size, height: size)
+        centerOffset = .zero
+        canShowCallout = false
+
+        backgroundCircle.frame = bounds
+        backgroundCircle.cornerRadius = size / 2
+        backgroundCircle.borderColor = UIColor.white.withAlphaComponent(0.9).cgColor
+        backgroundCircle.borderWidth = size * 0.08
+        layer.addSublayer(backgroundCircle)
+
+        let glyphInset = size * 0.19
+        glyphImageView.frame = bounds.insetBy(dx: glyphInset, dy: glyphInset)
+        glyphImageView.contentMode = .scaleAspectFit
+        glyphImageView.tintColor = .white
+        addSubview(glyphImageView)
+    }
+
+    required init?(coder aDecoder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func update(color: UIColor, glyph: String) {
+        let size = Self.markerSize
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        backgroundCircle.backgroundColor = color.withAlphaComponent(0.7).cgColor
+        CATransaction.commit()
+
+        let symbolPointSize = size * 0.42
+        let config = UIImage.SymbolConfiguration(pointSize: symbolPointSize, weight: .semibold)
+        if let sfImage = UIImage(systemName: glyph, withConfiguration: config) {
+            glyphImageView.image = sfImage
+        } else if !glyph.isEmpty {
+            let glyphInset = size * 0.19
+            glyphImageView.image = glyph.prefix(2).textImage(size: bounds.insetBy(dx: glyphInset, dy: glyphInset).size)
+        } else {
+            glyphImageView.image = nil
+        }
+    }
+}
+
+private extension StringProtocol {
+    func textImage(size: CGSize) -> UIImage? {
+        let renderer = UIGraphicsImageRenderer(size: size)
+        return renderer.image { _ in
+            let text = String(self)
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: size.height * 0.7, weight: .semibold),
+                .foregroundColor: UIColor.white
+            ]
+            let textSize = text.size(withAttributes: attributes)
+            let origin = CGPoint(
+                x: (size.width - textSize.width) / 2,
+                y: (size.height - textSize.height) / 2
+            )
+            text.draw(at: origin, withAttributes: attributes)
+        }
     }
 }
