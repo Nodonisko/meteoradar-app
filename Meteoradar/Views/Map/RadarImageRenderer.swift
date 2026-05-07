@@ -10,7 +10,6 @@ import UIKit
 
 class RadarImageRenderer: MKOverlayRenderer {
     let radarOverlay: RadarImageOverlay
-    var onRenderCompleted: ((Date?) -> Void)?
     
     init(overlay: RadarImageOverlay) {
         self.radarOverlay = overlay
@@ -51,11 +50,5 @@ class RadarImageRenderer: MKOverlayRenderer {
         
         // Restore graphics state
         context.restoreGState()
-
-        if let callback = onRenderCompleted {
-            DispatchQueue.main.async {
-                callback(self.radarOverlay.timestamp)
-            }
-        }
     }
 }

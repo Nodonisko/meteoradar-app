@@ -15,15 +15,14 @@ class RadarImageManager: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var lastUpdateTime: Date?
-    @Published private(set) var displayedTimestamp: Date?
-    
+
     private let networkService = NetworkService.shared
     private let settingsService = SettingsService.shared
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Meteoradar", category: "RadarImageManager")
-    private var animationTimer: Timer?
     private var updateTimer: Timer?
     private var retryTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
+    private var animationTimerCancellable: AnyCancellable?
     private var forecastFetchCancellable: AnyCancellable?
     private var activeForecastSourceTimestamp: Date?
     private var forecastRetryTimer: Timer?
@@ -56,31 +55,42 @@ class RadarImageManager: ObservableObject {
 
     func startAnimation() {
         guard !radarSequence.images.isEmpty else { return }
-        
+
         // Prepare animation - this jumps to the start frame
         guard radarSequence.prepareAnimation() else {
             radarSequence.isAnimating = false
             return
         }
-        
+
         radarSequence.isAnimating = true
-        animationTimer?.invalidate()
-        
-        // Start animation timer
-        animationTimer = Timer.scheduledTimer(withTimeInterval: Constants.Radar.animationInterval, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            
-            let shouldStop = self.radarSequence.nextAnimationFrame()
-            if shouldStop {
-                self.stopAnimation()
-            }
+
+        // Start a fresh timer so the start frame is visible for a full
+        // animationInterval before the first transition. An always-on timer
+        // would have a random phase relative to the play action and could
+        // fire only milliseconds later, flashing the start frame.
+        animationTimerCancellable = Timer.publish(
+            every: Constants.Radar.animationInterval,
+            on: .main,
+            in: .common
+        )
+        .autoconnect()
+        .sink { [weak self] _ in
+            self?.advanceAnimationFrame()
         }
     }
-    
+
     func stopAnimation() {
         radarSequence.isAnimating = false
-        animationTimer?.invalidate()
-        animationTimer = nil
+        animationTimerCancellable = nil
+    }
+
+    private func advanceAnimationFrame() {
+        guard radarSequence.isAnimating else { return }
+
+        let shouldStop = radarSequence.nextAnimationFrame()
+        if shouldStop {
+            stopAnimation()
+        }
     }
     
     func refreshRadarImages() {
@@ -409,11 +419,10 @@ class RadarImageManager: ObservableObject {
     }
     
     private func stopAllTimers() {
-        animationTimer?.invalidate()
+        animationTimerCancellable = nil
         updateTimer?.invalidate()
         retryTimer?.invalidate()
         forecastRetryTimer?.invalidate()
-        animationTimer = nil
         updateTimer = nil
         retryTimer = nil
         forecastRetryTimer = nil
@@ -563,33 +572,6 @@ class RadarImageManager: ObservableObject {
         forecastRetryTimer?.invalidate()
         forecastRetryTimer = Timer.scheduledTimer(withTimeInterval: Constants.Radar.forecastRetryDelay, repeats: false) { [weak self] _ in
             self?.startForecastFetchIfNeeded()
-        }
-    }
-
-    // MARK: - Rendering Coordination
-
-    func overlayDidUpdate(imageTimestamp: Date?) {
-        setDisplayedTimestamp(imageTimestamp, deferred: true)
-    }
-
-    func userSelectedImage(timestamp: Date?) {
-        // Ensure immediate UI update for taps, while keeping SwiftUI warnings away
-        setDisplayedTimestamp(timestamp, deferred: false)
-    }
-
-    private func setDisplayedTimestamp(_ timestamp: Date?, deferred: Bool) {
-        let updateBlock: () -> Void = { [weak self] in
-            guard let self = self else { return }
-            guard self.displayedTimestamp != timestamp else { return }
-            self.displayedTimestamp = timestamp
-        }
-
-        if deferred {
-            DispatchQueue.main.async(execute: updateBlock)
-        } else if Thread.isMainThread {
-            updateBlock()
-        } else {
-            DispatchQueue.main.async(execute: updateBlock)
         }
     }
 

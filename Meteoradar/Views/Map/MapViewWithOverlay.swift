@@ -176,9 +176,6 @@ struct MapViewWithOverlay: UIViewRepresentable {
             
             // Simply update the image in the existing overlay
             radarOverlay?.updateImage(currentImage, timestamp: timestamp, isForecast: isForecast)
-            radarRenderer?.onRenderCompleted = { renderedTimestamp in
-                radarImageManager.overlayDidUpdate(imageTimestamp: renderedTimestamp)
-            }
             // Trigger a redraw of the renderer
             radarRenderer?.setNeedsDisplay()
         }
@@ -287,9 +284,6 @@ struct MapViewWithOverlay: UIViewRepresentable {
             // Handle radar image overlay
             if let radarOverlay = overlay as? RadarImageOverlay {
                 let renderer = RadarImageRenderer(overlay: radarOverlay)
-                renderer.onRenderCompleted = { [weak self] renderedTimestamp in
-                    self?.parent.radarImageManager.overlayDidUpdate(imageTimestamp: renderedTimestamp)
-                }
                 self.radarRenderer = renderer  // Keep a reference
                 return renderer
             }

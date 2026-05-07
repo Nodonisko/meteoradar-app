@@ -152,8 +152,8 @@ struct RadarProgressBar: View {
         guard imageData.state == .success else { return }
         
         // Early return if this image is already the current one (using existing state!)
-        if let displayedTimestamp = radarImageManager.displayedTimestamp,
-           Calendar.current.isDate(imageData.timestamp, equalTo: displayedTimestamp, toGranularity: .minute) {
+        if let currentTimestamp = radarSequence.currentTimestamp,
+           Calendar.current.isDate(imageData.timestamp, equalTo: currentTimestamp, toGranularity: .minute) {
             return // Already selected - no work needed
         }
         
@@ -176,7 +176,6 @@ struct RadarProgressBar: View {
             loadedImage.cacheKey == imageData.cacheKey
         }) {
             radarSequence.currentImageIndex = index
-            radarImageManager.userSelectedImage(timestamp: imageData.timestamp)
         }
     }
 }
@@ -190,8 +189,8 @@ struct ProgressBarBox: View {
     
     // Capture state at render time to avoid mid-render changes
     private var isCurrentFrame: Bool {
-        guard let displayedTimestamp = radarImageManager.displayedTimestamp else { return false }
-        return Calendar.current.isDate(imageData.timestamp, equalTo: displayedTimestamp, toGranularity: .minute)
+        guard let currentTimestamp = radarSequence.currentTimestamp else { return false }
+        return Calendar.current.isDate(imageData.timestamp, equalTo: currentTimestamp, toGranularity: .minute)
     }
 
     // log whole imageData
@@ -222,7 +221,6 @@ struct ProgressBarBox: View {
             .onTapGesture {
                 if isEnabled {
                     print("Tap gesture triggered for: \(imageData.timestamp.radarTimestampString)")
-                    radarImageManager.userSelectedImage(timestamp: imageData.timestamp)
                     handleSelection()
                 } else if isFailed {
                     // Show error toast when tapping on failed box

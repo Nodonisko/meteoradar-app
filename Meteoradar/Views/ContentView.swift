@@ -33,7 +33,7 @@ struct ContentView: View {
 
     @Environment(\.requestReview) private var requestReview
     @Environment(\.openURL) private var openURL
-    
+
     init() {
         // Initialize region from saved state, or use default if no saved state exists
         let savedRegion = MapStateService.shared.loadRegion()
