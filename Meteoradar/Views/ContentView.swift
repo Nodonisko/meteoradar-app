@@ -112,6 +112,14 @@ struct ContentView: View {
         newPinDefaultName = customMarkerService.nextDefaultMarkerName
         showCreatePinDialog = true
     }
+
+    private func toggleAnimation() {
+        if radarManager.radarSequence.isAnimating {
+            radarManager.stopAnimation()
+        } else {
+            radarManager.startAnimation()
+        }
+    }
     
     
     var body: some View {
@@ -183,13 +191,7 @@ struct ContentView: View {
                     
                     VStack(spacing: 12) {
                         // Animation toggle button
-                        Button(action: {
-                            if radarManager.radarSequence.isAnimating {
-                                radarManager.stopAnimation()
-                            } else {
-                                radarManager.startAnimation()
-                            }
-                        }) {
+                        Button(action: toggleAnimation) {
                             Image(systemName: radarManager.radarSequence.isAnimating ? "pause.fill" : "play.fill")
                                 .font(.title2)
                                 .foregroundColor(.white)
@@ -223,6 +225,10 @@ struct ContentView: View {
             }
             .ignoresSafeArea(.container, edges: .bottom)
         }
+        .radarKeyboardShortcuts(
+            onToggleAnimation: toggleAnimation,
+            onRefresh: { radarManager.refreshRadarImages() }
+        )
         .onReceive(locationManager.$location) { location in
             // Only update location if not running in simulator
             if let location = location, !isRunningInSimulator {
@@ -356,4 +362,74 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
+}
+
+private extension View {
+    /// Maps the spacebar to play/pause and the R key to refresh on iPad / external keyboards.
+    /// No-op on iOS < 17.0; `.onKeyPress` requires iOS 17.0+.
+    @ViewBuilder
+    func radarKeyboardShortcuts(
+        onToggleAnimation: @escaping () -> Void,
+        onRefresh: @escaping () -> Void
+    ) -> some View {
+        if #available(iOS 17.0, *) {
+            modifier(RadarKeyboardShortcutsModifier(
+                onToggleAnimation: onToggleAnimation,
+                onRefresh: onRefresh
+            ))
+        } else {
+            self
+        }
+    }
+}
+
+@available(iOS 17.0, *)
+private struct RadarKeyboardShortcutsModifier: ViewModifier {
+    let onToggleAnimation: () -> Void
+    let onRefresh: () -> Void
+
+    @Environment(\.scenePhase) private var scenePhase
+    @FocusState private var isFocused: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .focusable()
+            .focusEffectDisabled()
+            .focused($isFocused)
+            .onAppear { grabFocus() }
+            .onChange(of: scenePhase) { _, phase in
+                // Re-grab focus when returning from background or when the
+                // window becomes key again (relevant on "Designed for iPad" on macOS).
+                if phase == .active { grabFocus() }
+            }
+            .onKeyPress { press in
+                switch press.key {
+                case .space:
+                    runAfterCurrentUpdate(onToggleAnimation)
+                    return .handled
+                case KeyEquivalent("r"), KeyEquivalent("R"):
+                    runAfterCurrentUpdate(onRefresh)
+                    return .handled
+                default:
+                    return .ignored
+                }
+            }
+    }
+
+    /// Defers the focus assignment to the next run loop tick to avoid
+    /// "Publishing changes from within view updates is not allowed" warnings
+    /// caused by mutating @FocusState during a view update pass.
+    private func grabFocus() {
+        runAfterCurrentUpdate { isFocused = true }
+    }
+
+    /// SwiftUI dispatches `.onKeyPress` actions during a view-update phase, so
+    /// mutating `@Published` state from `RadarImageManager` synchronously here
+    /// triggers a "Publishing changes from within view updates" warning.
+    /// Hopping onto the next main-actor turn breaks that ordering.
+    private func runAfterCurrentUpdate(_ action: @escaping () -> Void) {
+        Task { @MainActor in
+            action()
+        }
+    }
 }
