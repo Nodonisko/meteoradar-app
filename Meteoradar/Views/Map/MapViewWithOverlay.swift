@@ -10,8 +10,31 @@ import MapKit
 import UIKit
 import Combine
 
+final class MapCameraController: ObservableObject {
+    private weak var mapView: MKMapView?
+
+    func attach(_ mapView: MKMapView) {
+        self.mapView = mapView
+    }
+
+    func detach(_ mapView: MKMapView) {
+        guard self.mapView === mapView else { return }
+        self.mapView = nil
+    }
+
+    func center(on location: CLLocation) {
+        guard let mapView else { return }
+
+        let region = MKCoordinateRegion(
+            center: location.coordinate,
+            span: mapView.region.span
+        )
+        mapView.setRegion(region, animated: true)
+    }
+}
+
 struct MapViewWithOverlay: UIViewRepresentable {
-    @Binding var region: MKCoordinateRegion
+    @ObservedObject var cameraController: MapCameraController
     @ObservedObject var radarImageManager: RadarImageManager
     var userLocation: CLLocation?
     var userHeading: CLHeading?
@@ -25,10 +48,11 @@ struct MapViewWithOverlay: UIViewRepresentable {
         mapView.showsUserLocation = false  // We'll handle user location manually
         mapView.userTrackingMode = .none
         mapView.isRotateEnabled = false
-        mapView.setRegion(region, animated: false)
+        mapView.setRegion(MapStateService.shared.loadRegion() ?? Constants.Radar.defaultRegion, animated: false)
         
         // Store reference for settings changes and apply initial map appearance
         context.coordinator.setMapView(mapView)
+        cameraController.attach(mapView)
         applyMapAppearance(to: mapView)
         
         // Hide built-in compass and add custom one in top-left corner
@@ -69,7 +93,9 @@ struct MapViewWithOverlay: UIViewRepresentable {
         return mapView
     }
     
-    func updateUIView(_ mapView: MKMapView, context: Context) {        
+    func updateUIView(_ mapView: MKMapView, context: Context) {
+        context.coordinator.parent = self
+
         if context.coordinator.shouldUpdateRadar(
             currentImage: radarImageManager.radarSequence.currentImage,
             timestamp: radarImageManager.radarSequence.currentTimestamp
@@ -95,6 +121,10 @@ struct MapViewWithOverlay: UIViewRepresentable {
 
         // Keep custom markers in sync without recreating unchanged annotations
         context.coordinator.syncCustomMarkers(customMarkers, on: mapView)
+    }
+
+    static func dismantleUIView(_ uiView: MKMapView, coordinator: Coordinator) {
+        coordinator.parent.cameraController.detach(uiView)
     }
     
     private func applyMapAppearance(to mapView: MKMapView) {
@@ -340,7 +370,6 @@ struct MapViewWithOverlay: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
-            parent.region = mapView.region
             MapStateService.shared.saveRegion(mapView.region)
         }
 

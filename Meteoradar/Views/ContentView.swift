@@ -14,8 +14,8 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var locationManager = LocationManager()
     @StateObject private var radarManager = RadarImageManager()
+    @StateObject private var mapCameraController = MapCameraController()
     @ObservedObject private var settings = SettingsService.shared
-    @State private var region: MKCoordinateRegion
     @State private var showSettings = false
     @State private var settingsDetent: PresentationDetent
     @State private var showChangelog = false
@@ -34,11 +34,19 @@ struct ContentView: View {
     @Environment(\.requestReview) private var requestReview
     @Environment(\.openURL) private var openURL
 
+    private enum Layout {
+        static let screenSidePadding: CGFloat = 16
+        static let headerTopPadding: CGFloat = 8
+        static let headerButtonSize: CGFloat = 44
+        static let locationButtonSize: CGFloat = 34
+        static let locationButtonIconSize: CGFloat = 15
+        static let controlButtonSize: CGFloat = 50
+        static let controlButtonSpacing: CGFloat = 8
+        static let centerLocationButtonGap: CGFloat = 28
+        static let controlsProgressBarGap: CGFloat = 16
+    }
+
     init() {
-        // Initialize region from saved state, or use default if no saved state exists
-        let savedRegion = MapStateService.shared.loadRegion()
-        _region = State(initialValue: savedRegion ?? Constants.Radar.defaultRegion)
-        
         // Use large detent on iPad, medium on iPhone
         let isIPad = UIDevice.current.userInterfaceIdiom == .pad
         _settingsDetent = State(initialValue: isIPad ? .large : .medium)
@@ -120,12 +128,30 @@ struct ContentView: View {
             radarManager.startAnimation()
         }
     }
+
+    private func centerMap(on location: CLLocation) {
+        mapCameraController.center(on: location)
+    }
+
+    private func centerOnUserLocation() {
+        if let location = locationManager.location {
+            centerMap(on: location)
+            return
+        }
+
+        locationManager.requestLocationUpdate { result in
+            guard case .success(let location) = result else { return }
+            Task { @MainActor in
+                centerMap(on: location)
+            }
+        }
+    }
     
     
     var body: some View {
         ZStack {
             MapViewWithOverlay(
-                region: $region,
+                cameraController: mapCameraController,
                 radarImageManager: radarManager,
                 userLocation: locationManager.location,
                 userHeading: locationManager.heading,
@@ -144,8 +170,8 @@ struct ContentView: View {
                         timestamp: radarManager.radarSequence.currentTimestamp,
                         isForecast: radarManager.radarSequence.currentImageData?.kind.isForecast ?? false
                     )
-                        .padding(.leading, 16)
-                        .padding(.top, 8)
+                        .padding(.leading, Layout.screenSidePadding)
+                        .padding(.top, Layout.headerTopPadding)
                     
                     Spacer()
                     
@@ -155,12 +181,12 @@ struct ContentView: View {
                         Image(systemName: "gearshape.fill")
                             .font(.title2)
                             .foregroundColor(.white)
-                            .frame(width: 44, height: 44)
+                            .frame(width: Layout.headerButtonSize, height: Layout.headerButtonSize)
                             .background(Color.black.opacity(0.45))
                             .clipShape(Circle())
                     }
-                    .padding(.trailing, 16)
-                    .padding(.top, 8)
+                    .padding(.trailing, Layout.screenSidePadding)
+                    .padding(.top, Layout.headerTopPadding)
                 }
                 
                 Spacer()
@@ -189,36 +215,49 @@ struct ContentView: View {
                 HStack {
                     Spacer()
                     
-                    VStack(spacing: 12) {
-                        // Animation toggle button
-                        Button(action: toggleAnimation) {
-                            Image(systemName: radarManager.radarSequence.isAnimating ? "pause.fill" : "play.fill")
-                                .font(.title2)
+                    VStack(alignment: .trailing, spacing: Layout.centerLocationButtonGap) {
+                        Button(action: centerOnUserLocation) {
+                            Image(systemName: "location.fill")
+                                .font(.system(size: Layout.locationButtonIconSize, weight: .semibold))
                                 .foregroundColor(.white)
-                                .frame(width: 50, height: 50)
-                                .background(Color.blue)
+                                .frame(width: Layout.locationButtonSize, height: Layout.locationButtonSize)
+                                .background(Color.black.opacity(0.45))
                                 .clipShape(Circle())
                         }
-                        
-                        // Refresh button
-                        Button(action: {
-                            radarManager.refreshRadarImages()
-                        }) {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                                .frame(width: 50, height: 50)
-                                .background(Color.green)
-                                .clipShape(Circle())
+                        .disabled(!hasLocationAccess)
+                        .accessibilityLabel(Text("map.center_user_location"))
+
+                        VStack(spacing: Layout.controlButtonSpacing) {
+                            // Animation toggle button
+                            Button(action: toggleAnimation) {
+                                Image(systemName: radarManager.radarSequence.isAnimating ? "pause.fill" : "play.fill")
+                                    .font(.title2)
+                                    .foregroundColor(.white)
+                                    .frame(width: Layout.controlButtonSize, height: Layout.controlButtonSize)
+                                    .background(Color.blue)
+                                    .clipShape(Circle())
+                            }
+                            
+                            // Refresh button
+                            Button(action: {
+                                radarManager.refreshRadarImages()
+                            }) {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.title2)
+                                    .foregroundColor(.white)
+                                    .frame(width: Layout.controlButtonSize, height: Layout.controlButtonSize)
+                                    .background(Color.green)
+                                    .clipShape(Circle())
+                            }
                         }
                     }
-                    .padding(.trailing, 20)                    .padding(.bottom, RadarProgressBar.Constants.controlsBottomPadding(gapAboveProgressBar: 16))
+                    .padding(.trailing, Layout.screenSidePadding)
+                    .padding(.bottom, RadarProgressBar.Constants.controlsBottomPadding(gapAboveProgressBar: Layout.controlsProgressBarGap))
                 }
             }
             .transition(.opacity)
             
-            
-// Radar Progress Bar at the very bottom (under safe area)
+            // Radar Progress Bar at the very bottom (under safe area)
             VStack {
                 Spacer()
                 RadarProgressBar(radarSequence: radarManager.radarSequence, radarImageManager: radarManager)
@@ -232,10 +271,7 @@ struct ContentView: View {
         .onReceive(locationManager.$location) { location in
             // Only update location if not running in simulator
             if let location = location, !isRunningInSimulator {
-                region = MKCoordinateRegion(
-                    center: location.coordinate,
-                    span: Constants.Location.userLocationSpan
-                )
+                centerMap(on: location)
             }
         }
         .onChange(of: scenePhase) { phase in

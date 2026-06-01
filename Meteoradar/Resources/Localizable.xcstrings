@@ -139,13 +139,13 @@
         "cs" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "- Drobné opravy chyb a vylepšení"
+            "value" : "- Přidáno tlačítko pro vycentrování mapy na vaši polohu\n"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "- Minor bug fixes and improvements"
+            "value" : "- Added a button to center the map on your location\n"
           }
         }
       }
@@ -325,6 +325,22 @@
     },
     "Glyph" : {
 
+    },
+    "map.center_user_location" : {
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vycentrovat na moji polohu"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Center on my location"
+          }
+        }
+      }
     },
     "Made with ❤️ by Daniel Suchý" : {
       "comment" : "A footer text that credits the developer of the app.",

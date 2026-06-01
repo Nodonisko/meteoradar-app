@@ -126,9 +126,6 @@ struct Constants {
         // This is sufficient accuracy for weather radar positioning
         static let desiredAccuracy: CLLocationAccuracy = kCLLocationAccuracyBest
         
-        // Map span when centering on user location
-        static let userLocationSpan = MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
-        
         // Timeout for location requests (30 seconds)
         static let locationTimeout: TimeInterval = 30
     }
