@@ -12,6 +12,6 @@ enum RadarSharedConstants {
     static let forecastBaseURL = "https://radar.danielsuchy.cz/output_forecast/radar_%@_forecast_fct%d_overlay%@.png"
     static let radarIntervalSeconds: TimeInterval = 300
     static let serverLatencyOffsetSeconds: Int = 20
-    static let requestTimeout: TimeInterval = 25
+    static let requestTimeout: TimeInterval = 45
     static let filenamePattern = #"(\d{8}_\d{4})"#
 }
