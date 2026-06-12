@@ -8,8 +8,8 @@
 import Foundation
 
 enum RadarSharedConstants {
-    static let baseURL = "https://radar.danielsuchy.cz/output/radar_%@_overlay%@.png"
-    static let forecastBaseURL = "https://radar.danielsuchy.cz/output_forecast/radar_%@_forecast_fct%d_overlay%@.png"
+    static let baseURL = "https://radar.meteorabbit.io/cz/radar_cz_%@_overlay%@.png"
+    static let forecastBaseURL = "https://radar.meteorabbit.io/forecast/cz/radar_cz_%@_fct%d_overlay%@.png"
     static let radarIntervalSeconds: TimeInterval = 300
     static let serverLatencyOffsetSeconds: Int = 20
     static let requestTimeout: TimeInterval = 45

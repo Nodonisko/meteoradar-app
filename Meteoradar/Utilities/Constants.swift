@@ -26,8 +26,8 @@ struct Constants {
         /// URL suffix to append before .png extension
         var urlSuffix: String {
             switch self {
-            case .best: return "2x"
-            case .lower: return ""
+            case .best: return ""
+            case .lower: return "_small"
             }
         }
     }
