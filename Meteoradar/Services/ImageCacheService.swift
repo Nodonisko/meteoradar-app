@@ -6,12 +6,14 @@
 //
 
 import Foundation
-import UIKit
 
 protocol ImageCacheService {
-    func cachedImage(for key: String) -> UIImage?
-    func cacheImage(_ image: UIImage, for key: String)
-    func removeCachedImage(for key: String)
+    /// Returns the cached image's original bytes, or `nil` on a miss/expiry.
+    /// Raw bytes are stored verbatim so the server's size optimization and PNG
+    /// metadata (notably the `GeoBox` comment) are preserved across cache hits.
+    func cachedData(for key: String) -> Data?
+    func store(data: Data, for key: String)
+    func removeCached(for key: String)
     func clearCache()
     func cacheSize() -> Int64
     func isCached(key: String) -> Bool
@@ -24,15 +26,16 @@ extension ImageCacheService {
     ///   - kind: Type of radar frame (observed or forecast)
     ///   - sourceTimestamp: Source timestamp for the image
     ///   - forecastTimestamp: Forecast timestamp (same as source for observed images)
+    ///   - productID: Radar product the image belongs to (part of the URL/filename)
     /// - Returns: Unique cache key string
-    static func cacheKey(for kind: RadarFrameKind, sourceTimestamp: Date, forecastTimestamp: Date) -> String {
+    static func cacheKey(for kind: RadarFrameKind, sourceTimestamp: Date, forecastTimestamp: Date, productID: String) -> String {
         let quality = SettingsService.shared.imageQuality
         let urlString: String
         switch kind {
         case .observed:
-            urlString = Constants.Radar.observedURL(for: forecastTimestamp, quality: quality)
+            urlString = Constants.Radar.observedURL(for: forecastTimestamp, quality: quality, productID: productID)
         case .forecast(let offset):
-            urlString = Constants.Radar.forecastURL(for: sourceTimestamp, offsetMinutes: offset, quality: quality)
+            urlString = Constants.Radar.forecastURL(for: sourceTimestamp, offsetMinutes: offset, quality: quality, productID: productID)
         }
         guard let url = URL(string: urlString) else {
             return forecastTimestamp.radarTimestampString
@@ -55,7 +58,7 @@ class FileSystemImageCache: ImageCacheService {
         cleanupExpiredCache()
     }
     
-    func cachedImage(for key: String) -> UIImage? {
+    func cachedData(for key: String) -> Data? {
         guard let cacheDirectory else { return nil }
         let fileURL = cacheDirectory.appendingPathComponent(key)
         
@@ -65,42 +68,37 @@ class FileSystemImageCache: ImageCacheService {
         
         // Check if file is expired
         if isCacheExpired(for: fileURL) {
-            removeCachedImage(for: key)
+            removeCached(for: key)
             return nil
         }
         
-        guard let data = try? Data(contentsOf: fileURL),
-              let image = UIImage(data: data) else {
-            // Remove corrupted cache file
-            removeCachedImage(for: key)
+        guard let data = try? Data(contentsOf: fileURL) else {
+            removeCached(for: key)
             return nil
         }
         
-        return image
+        return data
     }
     
-    func cacheImage(_ image: UIImage, for key: String) {
+    func store(data: Data, for key: String) {
         queue.async { [weak self] in
             guard let self = self else { return }
             guard let cacheDirectory = self.cacheDirectory else { return }
             
             let fileURL = cacheDirectory.appendingPathComponent(key)
             
-            guard let data = image.pngData() else {
-                print("Failed to convert image to PNG data for key: \(key)")
-                return
-            }
-            
             do {
-                try data.write(to: fileURL)
-                print("Cached image for key: \(key)")
+                // Store the original, validated bytes atomically: keeps the
+                // server's optimized encoding and the embedded GeoBox metadata,
+                // and avoids leaving a corrupt file if the write is interrupted.
+                try data.write(to: fileURL, options: .atomic)
             } catch {
                 print("Failed to cache image for key \(key): \(error.localizedDescription)")
             }
         }
     }
     
-    func removeCachedImage(for key: String) {
+    func removeCached(for key: String) {
         queue.async { [weak self] in
             guard let self = self else { return }
             guard let cacheDirectory = self.cacheDirectory else { return }

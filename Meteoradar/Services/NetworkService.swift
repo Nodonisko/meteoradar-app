@@ -13,11 +13,17 @@ import OSLog
 // MARK: - Radar-Specific Types
 
 struct RadarImageResult {
+    /// Product the image was fetched for. Consumers must discard results whose
+    /// product no longer matches the current selection (stale in-flight requests).
+    let productID: String
     let timestamp: Date
     let sourceTimestamp: Date
     let kind: RadarFrameKind
     let forecastOffsetMinutes: Int?
     let result: Result<UIImage, Error>
+    /// Geographic bounds parsed from the image's `GeoBox` metadata, or `nil` if
+    /// the image carried none (caller falls back to configured product bounds).
+    let geoBox: GeoBounds?
     let loadTime: TimeInterval?
     let wasFromCache: Bool
 }
@@ -36,15 +42,21 @@ class NetworkService: NSObject, URLSessionDataDelegate {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Meteoradar", category: "NetworkService")
     private let cache = FileSystemImageCache.shared
     
-    // Radar-specific request deduplication by timestamp
+    // Radar-specific request deduplication by product + timestamp
     private struct ActiveRequestKey: Hashable {
+        let productID: String
         let kind: RadarFrameKind
         let sourceTimestamp: Date
         let targetTimestamp: Date
         let offsetMinutes: Int?
     }
     private var activeRadarRequests: [ActiveRequestKey: AnyPublisher<RadarImageResult, Never>] = [:]
-    private let requestLock = NSLock()
+    // Underlying URLSession tasks so cancelAllRadarRequests can actually stop
+    // in-flight downloads (saves data when switching products)
+    private var activeRadarTasks: [ActiveRequestKey: URLSessionDataTask] = [:]
+    // Recursive: task registration happens inside the eagerly-executed Future body
+    // while fetchRadarFrame still holds the lock
+    private let requestLock = NSRecursiveLock()
     
     private override init() {
         super.init()
@@ -60,22 +72,22 @@ class NetworkService: NSObject, URLSessionDataDelegate {
     // MARK: - Radar-Specific API
     
     /// Fetch radar image for specific timestamp with deduplication and error handling
-    func fetchRadarImage(for timestamp: Date) -> AnyPublisher<RadarImageResult, Never> {
-        return fetchRadarFrame(kind: .observed, sourceTimestamp: timestamp, targetTimestamp: timestamp, offsetMinutes: nil)
+    func fetchRadarImage(for timestamp: Date, productID: String) -> AnyPublisher<RadarImageResult, Never> {
+        return fetchRadarFrame(kind: .observed, sourceTimestamp: timestamp, targetTimestamp: timestamp, offsetMinutes: nil, productID: productID)
     }
     
-    func fetchForecastImage(sourceTimestamp: Date, offsetMinutes: Int) -> AnyPublisher<RadarImageResult, Never> {
+    func fetchForecastImage(sourceTimestamp: Date, offsetMinutes: Int, productID: String) -> AnyPublisher<RadarImageResult, Never> {
         let targetTimestamp = sourceTimestamp.addingTimeInterval(TimeInterval(offsetMinutes * 60))
         let kind = RadarFrameKind.forecast(offsetMinutes: offsetMinutes)
-        return fetchRadarFrame(kind: kind, sourceTimestamp: sourceTimestamp, targetTimestamp: targetTimestamp, offsetMinutes: offsetMinutes)
+        return fetchRadarFrame(kind: kind, sourceTimestamp: sourceTimestamp, targetTimestamp: targetTimestamp, offsetMinutes: offsetMinutes, productID: productID)
     }
     
-    private func fetchRadarFrame(kind: RadarFrameKind, sourceTimestamp: Date, targetTimestamp: Date, offsetMinutes: Int?) -> AnyPublisher<RadarImageResult, Never> {
+    private func fetchRadarFrame(kind: RadarFrameKind, sourceTimestamp: Date, targetTimestamp: Date, offsetMinutes: Int?, productID: String) -> AnyPublisher<RadarImageResult, Never> {
         requestLock.lock()
         defer { requestLock.unlock() }
         
         // Return existing request if already active
-        let key = ActiveRequestKey(kind: kind, sourceTimestamp: sourceTimestamp, targetTimestamp: targetTimestamp, offsetMinutes: offsetMinutes)
+        let key = ActiveRequestKey(productID: productID, kind: kind, sourceTimestamp: sourceTimestamp, targetTimestamp: targetTimestamp, offsetMinutes: offsetMinutes)
         if let existingRequest = activeRadarRequests[key] {
             return existingRequest
         }
@@ -85,18 +97,20 @@ class NetworkService: NSObject, URLSessionDataDelegate {
         let urlString: String
         switch kind {
         case .observed:
-            urlString = Constants.Radar.observedURL(for: targetTimestamp, quality: quality)
+            urlString = Constants.Radar.observedURL(for: targetTimestamp, quality: quality, productID: productID)
         case .forecast(let offset):
-            urlString = Constants.Radar.forecastURL(for: sourceTimestamp, offsetMinutes: offset, quality: quality)
+            urlString = Constants.Radar.forecastURL(for: sourceTimestamp, offsetMinutes: offset, quality: quality, productID: productID)
         }
         guard let url = URL(string: urlString) else {
             logger.error("Invalid radar URL for kind: \(String(describing: kind), privacy: .public), source: \(sourceTimestamp, privacy: .public), target: \(targetTimestamp, privacy: .public)")
             let errorResult = RadarImageResult(
+                productID: productID,
                 timestamp: targetTimestamp,
                 sourceTimestamp: sourceTimestamp,
                 kind: kind,
                 forecastOffsetMinutes: offsetMinutes,
                 result: .failure(NetworkError.invalidURL),
+                geoBox: nil,
                 loadTime: 0,
                 wasFromCache: false
             )
@@ -104,23 +118,31 @@ class NetworkService: NSObject, URLSessionDataDelegate {
         }
 
         let cacheKey = RadarCacheHelpers.cacheFilename(for: url)
-        if Constants.Radar.cacheEnabled, let cachedImage = cache.cachedImage(for: cacheKey) {
-            logger.debug("Cache hit for key: \(cacheKey, privacy: .public)")
-            let result = RadarImageResult(
-                timestamp: targetTimestamp,
-                sourceTimestamp: sourceTimestamp,
-                kind: kind,
-                forecastOffsetMinutes: offsetMinutes,
-                result: .success(cachedImage),
-                loadTime: 0,
-                wasFromCache: true
-            )
-            return Just(result).eraseToAnyPublisher()
+        if Constants.Radar.cacheEnabled, let cachedData = cache.cachedData(for: cacheKey) {
+            if let cachedImage = UIImage(data: cachedData) {
+                logger.debug("Cache hit for key: \(cacheKey, privacy: .public)")
+                let result = RadarImageResult(
+                    productID: productID,
+                    timestamp: targetTimestamp,
+                    sourceTimestamp: sourceTimestamp,
+                    kind: kind,
+                    forecastOffsetMinutes: offsetMinutes,
+                    result: .success(cachedImage),
+                    geoBox: GeoBounds(pngData: cachedData),
+                    loadTime: 0,
+                    wasFromCache: true
+                )
+                return Just(result).eraseToAnyPublisher()
+            } else {
+                // Corrupt cache entry: drop it and fall through to a fresh fetch.
+                logger.notice("Discarding undecodable cache entry for key: \(cacheKey, privacy: .public)")
+                cache.removeCached(for: cacheKey)
+            }
         }
         
         // Create radar-specific request
         let startTime = Date()
-        let request = createRadarRequest(for: url, kind: kind, sourceTimestamp: sourceTimestamp, targetTimestamp: targetTimestamp, offsetMinutes: offsetMinutes, startTime: startTime)
+        let request = createRadarRequest(for: url, requestKey: key, productID: productID, kind: kind, sourceTimestamp: sourceTimestamp, targetTimestamp: targetTimestamp, offsetMinutes: offsetMinutes, startTime: startTime)
             .handleEvents(
                 receiveCompletion: { [weak self] _ in
                     // Clean up when done
@@ -137,7 +159,7 @@ class NetworkService: NSObject, URLSessionDataDelegate {
     }
     
     /// Create the actual radar network request
-    private func createRadarRequest(for url: URL, kind: RadarFrameKind, sourceTimestamp: Date, targetTimestamp: Date, offsetMinutes: Int?, startTime: Date) -> AnyPublisher<RadarImageResult, Never> {
+    private func createRadarRequest(for url: URL, requestKey: ActiveRequestKey, productID: String, kind: RadarFrameKind, sourceTimestamp: Date, targetTimestamp: Date, offsetMinutes: Int?, startTime: Date) -> AnyPublisher<RadarImageResult, Never> {
         // Create URLRequest with HTTP/3 support
         // Use appropriate cache policy based on cacheEnabled setting
         let cachePolicy: URLRequest.CachePolicy = Constants.Radar.cacheEnabled ? .useProtocolCachePolicy : .reloadIgnoringLocalCacheData
@@ -152,11 +174,18 @@ class NetworkService: NSObject, URLSessionDataDelegate {
                 return
             }
             
-            let task = self.session.dataTask(with: request) { data, response, error in
+            let task = self.session.dataTask(with: request) { [weak self] data, response, error in
+                // Unregister the task once it finishes (or is cancelled)
+                if let self = self {
+                    self.requestLock.lock()
+                    self.activeRadarTasks.removeValue(forKey: requestKey)
+                    self.requestLock.unlock()
+                }
+                
                 if let error = error {
                     promise(.failure(error))
                 } else if let data = data, let response = response {
-                    self.logger.info("Network fetch completed for \(String(describing: kind), privacy: .public) image: \(targetTimestamp.radarTimestampString, privacy: .public) (\(data.count) bytes)")
+                    self?.logger.info("Network fetch completed for \(String(describing: kind), privacy: .public) image: \(targetTimestamp.radarTimestampString, privacy: .public) (\(data.count) bytes)")
                     promise(.success((data, response)))
                 } else {
                     promise(.failure(NetworkError.invalidImageData))
@@ -170,13 +199,18 @@ class NetworkService: NSObject, URLSessionDataDelegate {
             // Set priority based on frame type and recency
             task.priority = self.determinePriority(for: kind, targetTimestamp: targetTimestamp)
             
+            // Register so cancelAllRadarRequests can cancel the download
+            self.requestLock.lock()
+            self.activeRadarTasks[requestKey] = task
+            self.requestLock.unlock()
+            
             // Log network fetch start
             self.logger.info("Network fetch started for \(String(describing: kind), privacy: .public) image: \(targetTimestamp.radarTimestampString, privacy: .public)")
             
             task.resume()
         }
         .eraseToAnyPublisher()
-            .tryMap { data, response -> UIImage in
+            .tryMap { data, response -> (image: UIImage, data: Data) in
                 // Check HTTP status code first
                 if let httpResponse = response as? HTTPURLResponse {
                     let statusCode = httpResponse.statusCode
@@ -205,27 +239,31 @@ class NetworkService: NSObject, URLSessionDataDelegate {
                     }
                 }
                 
+                // Decode once; carry the original bytes alongside so we can cache
+                // them verbatim and parse the embedded GeoBox metadata.
                 guard let image = UIImage(data: data) else {
                     throw NetworkError.invalidImageData
                 }
-                return image
+                return (image: image, data: data)
             }
-            .handleEvents(receiveOutput: { [weak self] image in
-                // Cache the successfully downloaded image if caching is enabled
+            .handleEvents(receiveOutput: { [weak self] _, data in
+                // Cache the original, validated bytes (preserves metadata).
                 guard let self = self else { return }
                 if Constants.Radar.cacheEnabled {
                     let cacheKey = RadarCacheHelpers.cacheFilename(for: url)
-                    self.cache.cacheImage(image, for: cacheKey)
+                    self.cache.store(data: data, for: cacheKey)
                     self.logger.debug("Cached image for key: \(cacheKey, privacy: .public)")
                 }
             })
-            .map { image in
+            .map { image, data in
                 RadarImageResult(
+                    productID: productID,
                     timestamp: targetTimestamp,
                     sourceTimestamp: sourceTimestamp,
                     kind: kind,
                     forecastOffsetMinutes: offsetMinutes,
                     result: .success(image),
+                    geoBox: GeoBounds(pngData: data),
                     loadTime: Date().timeIntervalSince(startTime),
                     wasFromCache: false
                 )
@@ -233,11 +271,13 @@ class NetworkService: NSObject, URLSessionDataDelegate {
             .catch { [weak self] error -> AnyPublisher<RadarImageResult, Never> in
                 self?.logger.error("Radar request failed for URL: \(url.absoluteString, privacy: .public), kind: \(String(describing: kind), privacy: .public), source: \(sourceTimestamp, privacy: .public), target: \(targetTimestamp, privacy: .public), error: \(String(describing: error), privacy: .public)")
                 return Just(RadarImageResult(
+                    productID: productID,
                     timestamp: targetTimestamp,
                     sourceTimestamp: sourceTimestamp,
                     kind: kind,
                     forecastOffsetMinutes: offsetMinutes,
                     result: .failure(error),
+                    geoBox: nil,
                     loadTime: Date().timeIntervalSince(startTime),
                     wasFromCache: false
                 ))
@@ -251,6 +291,7 @@ class NetworkService: NSObject, URLSessionDataDelegate {
     /// Returns individual results as they complete (streaming), not batched
     func fetchRadarSequence(
         timestamps: [Date], 
+        productID: String,
         strategy: RadarLoadingStrategy = .sequential
     ) -> AnyPublisher<RadarImageResult, Never> {
         
@@ -259,7 +300,7 @@ class NetworkService: NSObject, URLSessionDataDelegate {
             // Sequential loading: one at a time, results stream in as each completes
             return timestamps.publisher
                 .flatMap(maxPublishers: .max(1)) { timestamp in
-                    self.fetchRadarImage(for: timestamp)
+                    self.fetchRadarImage(for: timestamp, productID: productID)
                 }
                 .eraseToAnyPublisher()
             
@@ -267,27 +308,35 @@ class NetworkService: NSObject, URLSessionDataDelegate {
             // Parallel loading: multiple concurrent, results stream in as each completes
             return timestamps.publisher
                 .flatMap(maxPublishers: .max(maxConcurrent)) { timestamp in
-                    self.fetchRadarImage(for: timestamp)
+                    self.fetchRadarImage(for: timestamp, productID: productID)
                 }
                 .eraseToAnyPublisher()
         }
     }
 
     /// Fetch forecast images sequentially, streaming results as they complete
-    func fetchForecastSequence(sourceTimestamp: Date, offsets: [Int]) -> AnyPublisher<RadarImageResult, Never> {
+    func fetchForecastSequence(sourceTimestamp: Date, offsets: [Int], productID: String) -> AnyPublisher<RadarImageResult, Never> {
         let sortedOffsets = offsets.sorted()
         return sortedOffsets.publisher
             .flatMap(maxPublishers: .max(1)) { offset -> AnyPublisher<RadarImageResult, Never> in
-                self.fetchForecastImage(sourceTimestamp: sourceTimestamp, offsetMinutes: offset)
+                self.fetchForecastImage(sourceTimestamp: sourceTimestamp, offsetMinutes: offset, productID: productID)
             }
             .eraseToAnyPublisher()
     }
     
-    /// Cancel all active radar requests and reset state
+    /// Cancel all active radar requests and reset state.
+    /// Cancels the underlying downloads too, so stale in-flight images
+    /// (e.g. from a previous product) never arrive and waste no data.
     func cancelAllRadarRequests() {
         requestLock.lock()
+        let tasks = Array(activeRadarTasks.values)
+        activeRadarTasks.removeAll()
         activeRadarRequests.removeAll()
         requestLock.unlock()
+        
+        for task in tasks {
+            task.cancel()
+        }
     }
     
     // MARK: - HTTP/3 Priority Management

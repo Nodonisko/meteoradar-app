@@ -49,9 +49,12 @@ struct RadarProgressBar: View {
     @State private var toastMessage: String?
     @State private var showToast = false
     
-    // Create stable snapshot to avoid race conditions (cached)
+    // Create stable snapshot to avoid race conditions (cached).
+    // Uses `timelineFrames` (a single forecast generation) rather than raw
+    // `images`, so retained previous-generation forecasts don't appear as extra,
+    // non-selectable boxes during the handoff to a new forecast.
     private var stableImages: [(id: String, data: RadarImageData)] {
-        radarSequence.images
+        radarSequence.timelineFrames
             .sorted { $0.timestamp < $1.timestamp }
             .map { (id: $0.cacheKey, data: $0) }
     }
@@ -357,7 +360,7 @@ struct ErrorToastView: View {
     
     // Add some sample images to show the progress bar
     let sampleTimestamps = Date.radarTimestamps(count: 12)
-    sequence.createPlaceholders(for: sampleTimestamps)
+    sequence.createPlaceholders(for: sampleTimestamps, productID: SettingsService.defaultRadarProductID)
     
     // Set up different loading states for preview
     if sequence.images.count >= 8 {

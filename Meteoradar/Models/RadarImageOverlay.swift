@@ -31,36 +31,14 @@ class RadarImageOverlay: NSObject, MKOverlay {
         self.isForecast = isForecast
     }
     
-    // Define the radar coverage area with exact bounds
-    static func createCzechRadarOverlay(image: UIImage?, timestamp: Date?) -> RadarImageOverlay {
-        // Exact radar image bounds
-        let northEast = Constants.Radar.northEast
-        let southWest = Constants.Radar.southWest
-        
-        // Center coordinate
-        let centerCoordinate = CLLocationCoordinate2D(
-            latitude: (northEast.latitude + southWest.latitude) / 2,
-            longitude: (northEast.longitude + southWest.longitude) / 2
-        )
-        
-        // Convert to map points
-        let neMapPoint = MKMapPoint(northEast)
-        let swMapPoint = MKMapPoint(southWest)
-        
-        // Create MKMapRect with proper bounds
-        // x = westernmost, y = northernmost, width = east-west span, height = north-south span
-        let mapRect = MKMapRect(
-            x: swMapPoint.x,                      // West edge
-            y: neMapPoint.y,                      // North edge  
-            width: neMapPoint.x - swMapPoint.x,   // East - West
-            height: swMapPoint.y - neMapPoint.y   // South - North
-        )
-        
+    // Define the radar coverage area from the image's geographic bounds.
+    static func create(bounds: GeoBounds, image: UIImage?, timestamp: Date?, isForecast: Bool = false) -> RadarImageOverlay {
         return RadarImageOverlay(
-            coordinate: centerCoordinate,
-            boundingMapRect: mapRect,
+            coordinate: bounds.center,
+            boundingMapRect: bounds.mapRect,
             image: image,
-            timestamp: timestamp
+            timestamp: timestamp,
+            isForecast: isForecast
         )
     }
 }

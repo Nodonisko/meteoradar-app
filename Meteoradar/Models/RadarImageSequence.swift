@@ -71,6 +71,11 @@ class RadarImageData: ObservableObject {
     
     // Image data (optional until loaded)
     @Published var image: UIImage?
+
+    /// Geographic bounds parsed from the image's `GeoBox` metadata. Drives the
+    /// overlay position. `nil` if the loaded image carried no metadata, in which
+    /// case the map falls back to the product's configured bounds.
+    @Published var geoBox: GeoBounds?
     
     // Loading metadata
     @Published var state: ImageLoadingState = .pending
@@ -192,17 +197,31 @@ class RadarImageSequence: ObservableObject {
         }
     }
     
+    /// The forecast source currently chosen for display: the newest source that
+    /// has at least one successfully-loaded frame - NOT the newest observed
+    /// frame's source. This keeps the previous forecast on screen until the new
+    /// one produces its first frame, and can never get ahead of real data because
+    /// a forecast source only has successes after its observed frame loaded.
+    /// `nil` until a forecast frame has loaded.
+    var displayedForecastSource: Date? {
+        images
+            .filter { $0.hasSucceeded && $0.kind.isForecast }
+            .map { $0.sourceTimestamp }
+            .max()
+    }
+
     // Only successfully loaded images for animation (skips failed ones)
     // Sorted newest first so index 0 shows the latest image
     var loadedImages: [RadarImageData] {
         let observed = images
             .filter { $0.hasSucceeded && $0.kind.isObserved }
             .sorted { $0.timestamp > $1.timestamp }
-        guard let latestObserved = observed.first else {
+
+        guard let forecastSource = displayedForecastSource else {
             return observed
         }
         let forecasts = images
-            .filter { $0.hasSucceeded && $0.kind.isForecast && Calendar.current.isDate($0.sourceTimestamp, equalTo: latestObserved.sourceTimestamp, toGranularity: .minute) }
+            .filter { $0.hasSucceeded && $0.kind.isForecast && Calendar.current.isDate($0.sourceTimestamp, equalTo: forecastSource, toGranularity: .minute) }
             .sorted { lhs, rhs in
                 switch (lhs.kind, rhs.kind) {
                 case (.forecast(let leftOffset), .forecast(let rightOffset)):
@@ -212,6 +231,24 @@ class RadarImageSequence: ObservableObject {
                     return lhs.forecastTimestamp < rhs.forecastTimestamp
                 }
             }
+        return observed + forecasts
+    }
+
+    /// Frames that make up the progress bar / timeline UI: every observed frame
+    /// (in any loading state) plus the forecast frames for a SINGLE source. The
+    /// retained previous-generation forecasts (kept in `images` for display
+    /// continuity) are excluded so the bar shows one coherent timeline instead of
+    /// two interleaved generations. Prefers the displayed (loaded) source; before
+    /// any forecast has loaded it falls back to the newest source we're fetching
+    /// so in-progress boxes still appear.
+    var timelineFrames: [RadarImageData] {
+        let observed = images.filter { $0.kind.isObserved }
+        let forecastSource = displayedForecastSource
+            ?? images.filter { $0.kind.isForecast }.map { $0.sourceTimestamp }.max()
+        guard let forecastSource else { return observed }
+        let forecasts = images.filter {
+            $0.kind.isForecast && Calendar.current.isDate($0.sourceTimestamp, equalTo: forecastSource, toGranularity: .minute)
+        }
         return observed + forecasts
     }
     
@@ -238,6 +275,12 @@ class RadarImageSequence: ObservableObject {
         // If current index is invalid, fall back to newest image (index 0)
         let safeIndex = min(currentImageIndex, availableImages.count - 1)
         return availableImages[safeIndex].timestamp
+    }
+
+    /// Geographic bounds of the currently displayed frame, parsed from its
+    /// `GeoBox` metadata. `nil` until a frame with metadata is displayed.
+    var currentGeoBox: GeoBounds? {
+        currentImageData?.geoBox
     }
     
     // MARK: - Animation Control
@@ -311,7 +354,7 @@ class RadarImageSequence: ObservableObject {
     }
     
     // Management methods for sequential loading
-    func createPlaceholders(for timestamps: [Date], forecastOffsets: [Int] = []) {
+    func createPlaceholders(for timestamps: [Date], forecastOffsets: [Int] = [], productID: String) {
         // Remember what we're currently viewing before making changes
         let currentViewingTimestamp = currentTimestamp
         
@@ -328,7 +371,7 @@ class RadarImageSequence: ObservableObject {
                 newImages.append(existingObserved)
             } else {
                 // Create new placeholder only if we don't have a successful one
-                let urlString = Constants.Radar.observedURL(for: timestamp, quality: SettingsService.shared.imageQuality)
+                let urlString = Constants.Radar.observedURL(for: timestamp, quality: SettingsService.shared.imageQuality, productID: productID)
                 let observedData = RadarImageData(
                     timestamp: timestamp,
                     urlString: urlString,
@@ -352,7 +395,7 @@ class RadarImageSequence: ObservableObject {
                     } else {
                         // Create new placeholder only if we don't have a successful one
                         let forecastTimestamp = timestamp.addingTimeInterval(TimeInterval(offset * 60))
-                        let urlString = Constants.Radar.forecastURL(for: timestamp, offsetMinutes: offset, quality: SettingsService.shared.imageQuality)
+                        let urlString = Constants.Radar.forecastURL(for: timestamp, offsetMinutes: offset, quality: SettingsService.shared.imageQuality, productID: productID)
                         let forecastData = RadarImageData(
                             timestamp: forecastTimestamp,
                             urlString: urlString,
@@ -364,6 +407,21 @@ class RadarImageSequence: ObservableObject {
                     }
                 }
             }
+        }
+        
+        // Keep the previous generation's successfully-loaded forecasts so the
+        // displayed forecast doesn't vanish during the handoff to a new source.
+        // They live for one extra cycle and `loadedImages` only promotes the new
+        // source once it has produced its first frame.
+        if let newestTimestamp = timestamps.first {
+            let previousSource = newestTimestamp.previousRadarTime
+            let retainedForecasts = images.filter { data in
+                data.kind.isForecast &&
+                data.hasSucceeded &&
+                Calendar.current.isDate(data.sourceTimestamp, equalTo: previousSource, toGranularity: .minute) &&
+                !newImages.contains(where: { $0 === data })
+            }
+            newImages.append(contentsOf: retainedForecasts)
         }
         
         images = newImages
@@ -398,12 +456,11 @@ class RadarImageSequence: ObservableObject {
         return images.filter { $0.hasFailed && $0.shouldRetry }
     }
     
-    var newestObservedImage: RadarImageData? {
+    /// The newest observed frame that has actually loaded. Used to anchor the
+    /// forecast to real data rather than a not-yet-arrived placeholder.
+    var newestSuccessfulObservedImage: RadarImageData? {
         return images
-            .filter { data in
-                if case .observed = data.kind { return true }
-                return false
-            }
+            .filter { $0.kind.isObserved && $0.hasSucceeded }
             .max { $0.timestamp < $1.timestamp }
     }
     
@@ -439,8 +496,9 @@ class RadarImageSequence: ObservableObject {
     }
     
     // Update image from cache or network
-    func updateImage(_ imageData: RadarImageData, with image: UIImage, fromCache: Bool = false) {
+    func updateImage(_ imageData: RadarImageData, with image: UIImage, geoBox: GeoBounds?, fromCache: Bool = false) {
         imageData.image = image
+        imageData.geoBox = geoBox
         imageData.state = .success
         imageData.endTime = Date()
         imageData.attemptCount = 0
@@ -451,6 +509,14 @@ class RadarImageSequence: ObservableObject {
         } else {
             imageData.markAsNetworkLoaded()
         }
+    }
+    
+    /// Removes all frames. Used when the radar product changes - frames from the
+    /// previous product must not be reused by timestamp for the new one.
+    func removeAllImages() {
+        images = []
+        currentImageIndex = 0
+        isAnimating = false
     }
     
     func removeImage(at index: Int) {

@@ -23,13 +23,27 @@ class RadarImageManager: ObservableObject {
     private var retryTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
     private var animationTimerCancellable: AnyCancellable?
+    private var observedFetchCancellable: AnyCancellable?
     private var forecastFetchCancellable: AnyCancellable?
     private var activeForecastSourceTimestamp: Date?
     private var forecastRetryTimer: Timer?
     private var lastUsedIntervalMinutes: Int?
     
+    /// The product this manager is currently operating on. Set deterministically
+    /// from the product-change event payload (never read from the mutable global
+    /// mid-switch) and threaded explicitly through the whole fetch pipeline.
+    private var currentProductID: String
+
+    /// Publish delay for the current product, used as a soft lower bound when
+    /// scheduling fetches so we don't ping the server before its image can exist.
+    private var currentPublishDelaySeconds: Int {
+        RadarProductService.shared.product(withID: currentProductID)?.publishDelaySeconds
+            ?? RadarSharedConstants.serverLatencyOffsetSeconds
+    }
+    
     
     init() {
+        currentProductID = RadarProductService.shared.selectedProduct.id
         setupPublishedForwarding()
         setupSettingsObserver()
         setupAppLifecycleObserver()
@@ -111,6 +125,10 @@ class RadarImageManager: ObservableObject {
     
     func cancelAllFetches() {
         networkService.cancelAllRadarRequests()
+        // Cancel our subscription too - otherwise results already in flight
+        // would still be delivered and applied to fresh placeholders
+        observedFetchCancellable?.cancel()
+        observedFetchCancellable = nil
         cancelForecastFetch()
         // Reset any loading placeholders to pending state
         for image in radarSequence.images where image.isLoading {
@@ -166,6 +184,30 @@ class RadarImageManager: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+        
+        // Observe radar product (country) changes and reload the whole sequence.
+        // We adopt the product ID from the publisher *payload* - not from
+        // SettingsService/RadarProductService - because @Published emits during
+        // willSet, when the stored value still reflects the previous product.
+        settingsService.$selectedRadarProductID
+            .dropFirst() // Skip initial value (we already fetch on init)
+            .removeDuplicates()
+            .sink { [weak self] newProductID in
+                guard let self = self else { return }
+                self.logger.info("Radar product changed to \(newProductID, privacy: .public), reloading sequence")
+                self.currentProductID = newProductID
+                self.stopAnimation()
+                self.cancelAllFetches()
+                self.retryTimer?.invalidate()
+                self.retryTimer = nil
+                // Old product's frames must not be reused for the new product
+                self.radarSequence.removeAllImages()
+                self.fetchLatestRadarImages()
+                // The new product may publish on a different schedule, so realign
+                // the update timer to its publish delay.
+                self.scheduleNextUpdateTimer()
+            }
+            .store(in: &cancellables)
     }
     
     private func setupAppLifecycleObserver() {
@@ -185,22 +227,16 @@ class RadarImageManager: ObservableObject {
     private func scheduleNextUpdateTimer() {
         updateTimer?.invalidate()
 
-        let delay = max(1, Date.utcNow.secondsUntilNextRadarUpdate)
+        let delay = max(1, Date.utcNow.secondsUntilNextRadarUpdate(publishDelaySeconds: currentPublishDelaySeconds))
         let timer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
-            self?.checkForRadarUpdate()
+            // The timer is scheduled precisely at the expected publish time, so a
+            // fire always means "fetch now". `fetchLatestRadarImages` recomputes the
+            // newest available timestamp and skips frames we already have.
+            self?.fetchLatestRadarImages()
             self?.scheduleNextUpdateTimer()
         }
         timer.tolerance = min(5, delay * 0.1)
         updateTimer = timer
-    }
-    
-    private func checkForRadarUpdate() {
-        let now = Date.utcNow
-        
-        // Only fetch missing images when we're at a 5-minute interval
-        if now.isRadarUpdateTime {
-            fetchLatestRadarImages() // This will fetch all missing images, not just the latest
-        }
     }
     
     
@@ -213,7 +249,11 @@ class RadarImageManager: ObservableObject {
 
         let interval = settingsService.radarImageIntervalMinutes
         lastUsedIntervalMinutes = interval
-        let timestamps = Date.radarTimestamps(count: Constants.Radar.imageCount, intervalMinutes: interval)
+        let timestamps = Date.radarTimestamps(
+            count: Constants.Radar.imageCount,
+            intervalMinutes: interval,
+            publishDelaySeconds: currentPublishDelaySeconds
+        )
 
         // Cancel any active forecast fetch BEFORE creating new placeholders
         // This ensures old network operations don't try to update stale placeholders
@@ -221,7 +261,7 @@ class RadarImageManager: ObservableObject {
 
         // Create placeholders for all timestamps first (this ensures progress bar shows immediately)
         let forecastOffsets = Constants.Radar.forecastOffsets()
-        radarSequence.createPlaceholders(for: timestamps, forecastOffsets: forecastOffsets)
+        radarSequence.createPlaceholders(for: timestamps, forecastOffsets: forecastOffsets, productID: currentProductID)
         activeForecastSourceTimestamp = timestamps.first
         
         // Fetch images that we don't already have
@@ -266,8 +306,9 @@ class RadarImageManager: ObservableObject {
             }
         }
         
-        networkService.fetchRadarSequence(
+        observedFetchCancellable = networkService.fetchRadarSequence(
             timestamps: timestamps,
+            productID: currentProductID,
             strategy: .sequential
         )
         .sink(
@@ -280,11 +321,19 @@ class RadarImageManager: ObservableObject {
                 self?.processIndividualResult(radarResult, wasOnNewest: wasOnNewest)
             }
         )
-        .store(in: &cancellables)
     }
     
     /// Process individual result as it arrives (for progressive UI updates)
     private func processIndividualResult(_ radarResult: RadarImageResult, wasOnNewest: Bool) {
+        // Discard results from a previously selected product - an in-flight image
+        // for the same timestamp would otherwise be rendered on the new product's bounds.
+        // Compared against our own operational product, not the global (which is
+        // stale during the @Published willSet that triggers a product switch).
+        guard radarResult.productID == currentProductID else {
+            logger.notice("Discarding stale radar result for \(radarResult.timestamp.radarTimestampString) from product \(radarResult.productID, privacy: .public)")
+            return
+        }
+        
         // Find the placeholder to update
         guard let placeholder = radarSequence.images.first(where: { 
             $0.kind.isObserved && Calendar.current.isDate($0.timestamp, equalTo: radarResult.timestamp, toGranularity: .minute) 
@@ -297,7 +346,7 @@ class RadarImageManager: ObservableObject {
         
         switch radarResult.result {
         case .success(let image):
-            radarSequence.updateImage(placeholder, with: image, fromCache: radarResult.wasFromCache)
+            radarSequence.updateImage(placeholder, with: image, geoBox: radarResult.geoBox, fromCache: radarResult.wasFromCache)
             
             // If user was on newest before fetching, jump to newest available image
             if wasOnNewest {
@@ -305,6 +354,10 @@ class RadarImageManager: ObservableObject {
             }
 
             logger.info("Successfully loaded radar image for \(radarResult.timestamp.radarTimestampString) (\(radarResult.wasFromCache ? "cache" : "network"))")
+
+            if radarResult.geoBox == nil {
+                logger.warning("Radar image for \(radarResult.timestamp.radarTimestampString, privacy: .public) (\(radarResult.productID, privacy: .public)) has no GeoBox metadata; falling back to configured product bounds")
+            }
             
         case .failure(let error):
             handleImageFetchError(error, placeholder: placeholder, timestamp: radarResult.timestamp)
@@ -429,8 +482,11 @@ class RadarImageManager: ObservableObject {
     }
 
     private func startForecastFetchIfNeeded(force: Bool = false) {
-        // Prevent concurrent forecast fetches for the same source
-        guard let newestObserved = radarSequence.newestObservedImage, newestObserved.hasSucceeded else { return }
+        // Anchor the forecast to the newest observed frame we have actually loaded
+        // (never a not-yet-arrived placeholder). This keeps us generating the
+        // forecast for "the last normal image fetched" and is robust to a frame
+        // that publishes late.
+        guard let newestObserved = radarSequence.newestSuccessfulObservedImage else { return }
         
         // If already fetching and source hasn't changed, don't start another unless forced
         if !force {
@@ -501,7 +557,7 @@ class RadarImageManager: ObservableObject {
         }
 
         let sourceTimestamp = newestObserved.timestamp
-        forecastFetchCancellable = networkService.fetchForecastSequence(sourceTimestamp: sourceTimestamp, offsets: offsets)
+        forecastFetchCancellable = networkService.fetchForecastSequence(sourceTimestamp: sourceTimestamp, offsets: offsets, productID: currentProductID)
             .sink(
                 receiveCompletion: { [weak self] _ in
                     guard let self = self else { return }
@@ -532,6 +588,12 @@ class RadarImageManager: ObservableObject {
                 receiveValue: { [weak self] result in
                     guard let self = self else { return }
                     
+                    // Discard results from a previously selected product
+                    guard result.productID == self.currentProductID else {
+                        self.logger.notice("Discarding stale forecast result for \(result.timestamp.radarTimestampString) from product \(result.productID, privacy: .public)")
+                        return
+                    }
+                    
                     // Verify we're still working with the same source timestamp
                     // If source changed (e.g., user hit reload), ignore these results
                     guard let activeSource = self.activeForecastSourceTimestamp,
@@ -550,8 +612,11 @@ class RadarImageManager: ObservableObject {
 
                     switch result.result {
                     case .success(let image):
-                        self.radarSequence.updateImage(placeholder, with: image, fromCache: result.wasFromCache)
+                        self.radarSequence.updateImage(placeholder, with: image, geoBox: result.geoBox, fromCache: result.wasFromCache)
                         self.logger.info("Successfully loaded forecast image for \(result.timestamp.radarTimestampString) (\(result.wasFromCache ? "cache" : "network"))")
+                        if result.geoBox == nil {
+                            self.logger.warning("Forecast image for \(result.timestamp.radarTimestampString, privacy: .public) (\(result.productID, privacy: .public)) has no GeoBox metadata; falling back to configured product bounds")
+                        }
                     case .failure(let error):
                         self.handleImageFetchError(error, placeholder: placeholder, timestamp: result.timestamp)
                     }
@@ -563,7 +628,8 @@ class RadarImageManager: ObservableObject {
         let targetKey = FileSystemImageCache.cacheKey(
             for: result.kind,
             sourceTimestamp: result.sourceTimestamp,
-            forecastTimestamp: result.timestamp
+            forecastTimestamp: result.timestamp,
+            productID: result.productID
         )
         return radarSequence.images.first { $0.cacheKey == targetKey }
     }

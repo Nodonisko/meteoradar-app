@@ -20,6 +20,9 @@ final class SettingsService: ObservableObject {
     /// Default time interval in minutes
     static let defaultIntervalMinutes = 5
     
+    /// Default radar product ID (Czechia)
+    static let defaultRadarProductID = "cz"
+    
     // UserDefaults keys
     private enum Keys {
         static let overlayOpacity = "settings.overlayOpacity"
@@ -28,6 +31,7 @@ final class SettingsService: ObservableObject {
         static let imageQuality = "settings.imageQuality"
         static let mapAppearance = "settings.mapAppearance"
         static let isLegendEnabled = "settings.isLegendEnabled"
+        static let selectedRadarProductID = "settings.selectedRadarProductID"
     }
     
     /// Opacity for observed radar frames (0.0 - 1.0)
@@ -76,6 +80,13 @@ final class SettingsService: ObservableObject {
         }
     }
     
+    /// ID of the selected radar product (country/composite) from products.json
+    @Published var selectedRadarProductID: String {
+        didSet {
+            defaults.set(selectedRadarProductID, forKey: Keys.selectedRadarProductID)
+        }
+    }
+    
     private init() {
         // Load saved values or use defaults from Constants
         if defaults.object(forKey: Keys.overlayOpacity) != nil {
@@ -117,6 +128,8 @@ final class SettingsService: ObservableObject {
         } else {
             self.isLegendEnabled = false
         }
+        
+        self.selectedRadarProductID = defaults.string(forKey: Keys.selectedRadarProductID) ?? Self.defaultRadarProductID
     }
     
     /// Resets all settings to their default values
@@ -127,6 +140,7 @@ final class SettingsService: ObservableObject {
         imageQuality = Constants.Radar.defaultImageQuality
         mapAppearance = .light
         isLegendEnabled = false
+        selectedRadarProductID = Self.defaultRadarProductID
     }
 }
 

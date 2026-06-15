@@ -34,7 +34,7 @@ final class MapCameraController: ObservableObject {
 }
 
 struct MapViewWithOverlay: UIViewRepresentable {
-    @ObservedObject var cameraController: MapCameraController
+    let cameraController: MapCameraController
     @ObservedObject var radarImageManager: RadarImageManager
     var userLocation: CLLocation?
     var userHeading: CLHeading?
@@ -67,18 +67,12 @@ struct MapViewWithOverlay: UIViewRepresentable {
             compassButton.trailingAnchor.constraint(equalTo: mapView.safeAreaLayoutGuide.trailingAnchor, constant: -16)
         ])
         
-        // Add dimming overlay first (renders below radar overlay)
-        // This darkens areas outside radar coverage
-        let dimmingOverlay = DimmingOverlay()
-        mapView.addOverlay(dimmingOverlay, level: .aboveLabels)
-        
-        // Create ONE radar overlay that we'll keep updating
-        let radarOverlay = RadarImageOverlay.createCzechRadarOverlay(
-            image: radarImageManager.radarSequence.currentImage,
-            timestamp: radarImageManager.radarSequence.currentTimestamp
-        )
-        context.coordinator.radarOverlay = radarOverlay
-        mapView.addOverlay(radarOverlay, level: .aboveLabels)
+        // Add the dimming + radar overlays. Both position from the displayed
+        // frame's GeoBox metadata once it loads; until then we use the product's
+        // configured bounds so coverage shows immediately on launch.
+        let product = RadarProductService.shared.selectedProduct
+        let initialBounds = radarImageManager.radarSequence.currentGeoBox ?? product.bounds
+        context.coordinator.applyBounds(initialBounds, recenterTo: nil)
         
         // Create ONE user location annotation that we'll reuse forever
         context.coordinator.setupUserLocationAnnotation(on: mapView)
@@ -96,15 +90,21 @@ struct MapViewWithOverlay: UIViewRepresentable {
     func updateUIView(_ mapView: MKMapView, context: Context) {
         context.coordinator.parent = self
 
-        if context.coordinator.shouldUpdateRadar(
-            currentImage: radarImageManager.radarSequence.currentImage,
-            timestamp: radarImageManager.radarSequence.currentTimestamp
+        let sequence = radarImageManager.radarSequence
+        if let geoBox = sequence.currentGeoBox, geoBox != context.coordinator.appliedBounds {
+            // The displayed frame's bounds changed (first frame after a switch, or
+            // the backend re-projected mid-sequence). Reposition both overlays.
+            // This is the rare path; in steady state bounds are identical frame-to-frame.
+            context.coordinator.applyBounds(geoBox, recenterTo: nil)
+        } else if context.coordinator.shouldUpdateRadar(
+            currentImage: sequence.currentImage,
+            timestamp: sequence.currentTimestamp
         ) {
-            // Simply update the radar overlay's image - no removal/addition needed!
+            // Common path: bounds unchanged, just swap the overlay's image.
             context.coordinator.updateRadarImage(
                 radarImageManager: radarImageManager,
-                currentImage: radarImageManager.radarSequence.currentImage,
-                timestamp: radarImageManager.radarSequence.currentTimestamp
+                currentImage: sequence.currentImage,
+                timestamp: sequence.currentTimestamp
             )
         }
         
@@ -146,8 +146,12 @@ struct MapViewWithOverlay: UIViewRepresentable {
     class Coordinator: NSObject, MKMapViewDelegate {
         var parent: MapViewWithOverlay
         var radarOverlay: RadarImageOverlay?
+        var dimmingOverlay: DimmingOverlay?
         var radarRenderer: RadarImageRenderer?
         var userLocationAnnotation: MKPointAnnotation?
+        /// Bounds currently applied to the live overlays. Used to detect when a
+        /// frame's GeoBox differs and the overlays must be rebuilt.
+        fileprivate var appliedBounds: GeoBounds?
         private var settingsCancellables = Set<AnyCancellable>()
         private weak var mapView: MKMapView?
         private weak var userLocationView: UserLocationAnnotationView?
@@ -174,6 +178,19 @@ struct MapViewWithOverlay: UIViewRepresentable {
                     self?.applyMapAppearance(appearance)
                 }
                 .store(in: &settingsCancellables)
+            
+            // Subscribe to radar product (country) changes. Recenter immediately
+            // on the product's configured region (no waiting for the first image)
+            // and rebuild overlays on those configured bounds. Once the new
+            // product's frames load, their GeoBox metadata repositions the overlay.
+            settings.$selectedRadarProductID
+                .dropFirst()
+                .removeDuplicates()
+                .sink { [weak self] productID in
+                    guard let product = RadarProductService.shared.product(withID: productID) else { return }
+                    self?.applyBounds(product.bounds, recenterTo: product.region)
+                }
+                .store(in: &settingsCancellables)
         }
         
         func setMapView(_ mapView: MKMapView) {
@@ -198,6 +215,50 @@ struct MapViewWithOverlay: UIViewRepresentable {
             radarRenderer = nil
             radarOverlay = nil
             userLocationAnnotation = nil
+        }
+        
+        /// Removes and re-adds the dimming + radar overlays for the given bounds and,
+        /// optionally, recenters the camera. `MKOverlay.boundingMapRect` is immutable,
+        /// so changing coverage means rebuilding both overlays. Called only when bounds
+        /// actually change (product switch, or a frame whose GeoBox differs), keeping
+        /// the per-frame fast path a cheap image swap.
+        fileprivate func applyBounds(_ bounds: GeoBounds, recenterTo region: MKCoordinateRegion?) {
+            guard let mapView = mapView else { return }
+            
+            // Carry over the current image only if it belongs to these bounds. On a
+            // product switch we apply configured bounds while the old/empty sequence
+            // doesn't match, so we start blank until the new product's frames arrive.
+            let sequence = parent.radarImageManager.radarSequence
+            let matchesBounds = sequence.currentGeoBox.map { $0 == bounds } ?? false
+            let image = matchesBounds ? sequence.currentImage : nil
+            let timestamp = matchesBounds ? sequence.currentTimestamp : nil
+            let isForecast = matchesBounds ? (sequence.currentImageData?.kind.isForecast ?? false) : false
+            
+            if let oldDimming = dimmingOverlay {
+                mapView.removeOverlay(oldDimming)
+            }
+            if let oldRadar = radarOverlay {
+                mapView.removeOverlay(oldRadar)
+            }
+            radarRenderer = nil
+            
+            let newDimming = DimmingOverlay(bounds: bounds)
+            dimmingOverlay = newDimming
+            mapView.addOverlay(newDimming, level: .aboveLabels)
+            
+            let newRadar = RadarImageOverlay.create(bounds: bounds, image: image, timestamp: timestamp, isForecast: isForecast)
+            radarOverlay = newRadar
+            mapView.addOverlay(newRadar, level: .aboveLabels)
+            
+            appliedBounds = bounds
+            // Record what the freshly built overlay already shows so updateUIView's
+            // shouldUpdateRadar doesn't redundantly re-swap the same image.
+            lastRenderedTimestamp = timestamp
+            lastRenderedImageID = image.map { ObjectIdentifier($0) }
+            
+            if let region = region {
+                mapView.setRegion(region, animated: true)
+            }
         }
         
         func updateRadarImage(radarImageManager: RadarImageManager, currentImage: UIImage?, timestamp: Date?) {

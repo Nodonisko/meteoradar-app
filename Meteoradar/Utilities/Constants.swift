@@ -59,7 +59,6 @@ struct Constants {
         static let updateInterval: TimeInterval = 300 // 5 minutes in seconds
         static let retryInterval: TimeInterval = 10 // Retry every 10 seconds if image not available
         static let radarImageInterval: TimeInterval = RadarSharedConstants.radarIntervalSeconds // New radar image every 5 minutes
-        static let serverLatencyOffset: Int = RadarSharedConstants.serverLatencyOffsetSeconds // Seconds to wait after 5-min mark for server to generate images
         
         // Sequential loading configuration
         static let maxRetryAttempts = 5 // Observed frames: initial attempt + one retry
@@ -80,30 +79,26 @@ struct Constants {
         static let maxCacheSize: Int64 = 50 * 1024 * 1024 // 50MB cache limit
         static let cacheExpirationDays = 7 // Remove cached images older than 7 days
         
-        // Czech radar coverage bounds
-        static let northEast = CLLocationCoordinate2D(latitude: 51.458, longitude: 19.624)
-        static let southWest = CLLocationCoordinate2D(latitude: 48.047, longitude: 11.267)
-        
-        // Default map region for Czech radar
-        static let defaultRegion = MKCoordinateRegion(
-            center: CLLocationCoordinate2D(
-                latitude: (northEast.latitude + southWest.latitude) / 2,
-                longitude: (northEast.longitude + southWest.longitude) / 2
-            ),
-            span: MKCoordinateSpan(latitudeDelta: 3.5, longitudeDelta: 8.5)
-        )
+        // Default map region for the currently selected radar product.
+        // Only read for the initial map setup (steady state), never during a product switch.
+        static var defaultRegion: MKCoordinateRegion {
+            RadarProductService.shared.selectedProduct.region
+        }
         
         static func forecastOffsets() -> [Int] {
             guard forecastHorizonMinutes > 0, forecastIntervalMinutes > 0 else { return [] }
             return stride(from: forecastIntervalMinutes, through: forecastHorizonMinutes, by: forecastIntervalMinutes).map { $0 }
         }
         
-        static func forecastURL(for sourceTimestamp: Date, offsetMinutes: Int, quality: ImageQuality) -> String {
-            return String(format: forecastBaseURL, sourceTimestamp.radarTimestampString, offsetMinutes, quality.urlSuffix)
+        // The radar product is always passed explicitly. These builders intentionally
+        // do NOT default to the selected product: reading that mutable global mid-switch
+        // (while @Published is still in willSet) would resolve to the *previous* product.
+        static func forecastURL(for sourceTimestamp: Date, offsetMinutes: Int, quality: ImageQuality, productID: String) -> String {
+            return String(format: forecastBaseURL, productID, productID, sourceTimestamp.radarTimestampString, offsetMinutes, quality.urlSuffix)
         }
         
-        static func observedURL(for timestamp: Date, quality: ImageQuality) -> String {
-            return String(format: baseURL, timestamp.radarTimestampString, quality.urlSuffix)
+        static func observedURL(for timestamp: Date, quality: ImageQuality, productID: String) -> String {
+            return String(format: baseURL, productID, productID, timestamp.radarTimestampString, quality.urlSuffix)
         }
     }
     

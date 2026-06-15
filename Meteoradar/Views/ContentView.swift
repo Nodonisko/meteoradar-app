@@ -51,15 +51,6 @@ struct ContentView: View {
         let isIPad = UIDevice.current.userInterfaceIdiom == .pad
         _settingsDetent = State(initialValue: isIPad ? .large : .medium)
     }
-    
-    // Helper function to detect if running in simulator
-    private var isRunningInSimulator: Bool {
-        #if targetEnvironment(simulator)
-        return true
-        #else
-        return false
-        #endif
-    }
 
     private var hasLocationAccess: Bool {
         switch locationManager.authorizationStatus {
@@ -129,20 +120,16 @@ struct ContentView: View {
         }
     }
 
-    private func centerMap(on location: CLLocation) {
-        mapCameraController.center(on: location)
-    }
-
     private func centerOnUserLocation() {
         if let location = locationManager.location {
-            centerMap(on: location)
+            mapCameraController.center(on: location)
             return
         }
 
         locationManager.requestLocationUpdate { result in
             guard case .success(let location) = result else { return }
             Task { @MainActor in
-                centerMap(on: location)
+                mapCameraController.center(on: location)
             }
         }
     }
@@ -165,13 +152,18 @@ struct ContentView: View {
             
             // Timestamp display in top left corner, settings button in top right
             VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    RadarTimestampDisplay(
-                        timestamp: radarManager.radarSequence.currentTimestamp,
-                        isForecast: radarManager.radarSequence.currentImageData?.kind.isForecast ?? false
-                    )
-                        .padding(.leading, Layout.screenSidePadding)
-                        .padding(.top, Layout.headerTopPadding)
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        RadarTimestampDisplay(
+                            timestamp: radarManager.radarSequence.currentTimestamp,
+                            isForecast: radarManager.radarSequence.currentImageData?.kind.isForecast ?? false
+                        )
+                        
+                        // Country flag of the currently selected radar product
+                        RadarProductPicker()
+                    }
+                    .padding(.leading, Layout.screenSidePadding)
+                    .padding(.top, Layout.headerTopPadding)
                     
                     Spacer()
                     
@@ -268,12 +260,6 @@ struct ContentView: View {
             onToggleAnimation: toggleAnimation,
             onRefresh: { radarManager.refreshRadarImages() }
         )
-        .onReceive(locationManager.$location) { location in
-            // Only update location if not running in simulator
-            if let location = location, !isRunningInSimulator {
-                centerMap(on: location)
-            }
-        }
         .onChange(of: scenePhase) { phase in
             switch phase {
             case .active:

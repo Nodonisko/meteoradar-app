@@ -19,7 +19,9 @@ enum WidgetRadarConstants {
     static let requestTimeout: TimeInterval = RadarSharedConstants.requestTimeout
 
     static func observedURL(for timestamp: Date, qualitySuffix: String) -> URL? {
-        let urlString = String(format: baseURL, timestamp.radarTimestampString, qualitySuffix)
+        // Widget is fixed to the default (Czech) product for now
+        let productID = RadarSharedConstants.defaultProductID
+        let urlString = String(format: baseURL, productID, productID, timestamp.radarTimestampString, qualitySuffix)
         return URL(string: urlString)
     }
 

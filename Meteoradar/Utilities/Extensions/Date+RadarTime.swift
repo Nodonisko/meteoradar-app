@@ -74,8 +74,16 @@ extension Date {
     /// - Parameters:
     ///   - count: Number of timestamps to generate
     ///   - intervalMinutes: Time interval between images in minutes (default: 5)
+    ///   - publishDelaySeconds: Soft lower bound (seconds after the 5-minute mark)
+    ///     before the newest image can exist. While we're still inside that window
+    ///     the newest target steps back one mark, so we never target an image that
+    ///     is guaranteed to 404 (e.g. Poland publishes ~4 minutes late).
     /// - Returns: Array of dates in descending chronological order (newest first)
-    static func radarTimestamps(count: Int, intervalMinutes: Int = 5) -> [Date] {
+    static func radarTimestamps(
+        count: Int,
+        intervalMinutes: Int = 5,
+        publishDelaySeconds: Int = RadarSharedConstants.serverLatencyOffsetSeconds
+    ) -> [Date] {
         // Always start from the nearest 5-minute boundary, regardless of display interval.
         //
         // Why: The server generates new radar images every 5 minutes (e.g., 12:00, 12:05, 12:10...).
@@ -89,7 +97,11 @@ extension Date {
         //
         // The display interval only affects how far back we step for historical images.
         // Since all intervals (5, 10, 15, 20) are multiples of 5, all timestamps remain valid.
-        let latestTime = Date.utcNow.roundedToNearestRadarTime
+        let now = Date.utcNow
+        let rounded = now.roundedToNearestRadarTime
+        let latestTime = now.timeIntervalSince(rounded) < Double(publishDelaySeconds)
+            ? rounded.previousRadarTime
+            : rounded
         let intervalSeconds = Double(intervalMinutes * 60)
         var timestamps: [Date] = []
         
@@ -101,8 +113,13 @@ extension Date {
         return timestamps
     }
     
-    /// Checks if the current time is at a 5-minute interval boundary (with server latency offset)
-    var isRadarUpdateTime: Bool {
+    /// Returns the number of seconds until the next radar image is expected, i.e.
+    /// the next 5-minute mark plus the product's publish delay.
+    /// - Parameter publishDelaySeconds: Seconds after the 5-minute mark before the
+    ///   image is expected. Must be < 300 (a publish delay can't exceed one cycle).
+    func secondsUntilNextRadarUpdate(
+        publishDelaySeconds: Int = RadarSharedConstants.serverLatencyOffsetSeconds
+    ) -> TimeInterval {
         let calendar = Calendar(identifier: .gregorian)
         var utcCalendar = calendar
         utcCalendar.timeZone = TimeZone(abbreviation: "UTC")!
@@ -111,27 +128,11 @@ extension Date {
         let minute = components.minute ?? 0
         let second = components.second ?? 0
         
-        let serverLatencyOffset = Constants.Radar.serverLatencyOffset
-        // Check window: serverLatencyOffset to serverLatencyOffset+30 seconds after the 5-minute mark
-        return (minute % 5 == 0) && (second >= serverLatencyOffset) && (second <= serverLatencyOffset + 30)
-    }
-    
-    /// Returns the number of seconds until the next 5-minute interval check (with server latency offset)
-    var secondsUntilNextRadarUpdate: TimeInterval {
-        let calendar = Calendar(identifier: .gregorian)
-        var utcCalendar = calendar
-        utcCalendar.timeZone = TimeZone(abbreviation: "UTC")!
-        
-        let components = utcCalendar.dateComponents([.minute, .second], from: self)
-        let minute = components.minute ?? 0
-        let second = components.second ?? 0
-        
-        let serverLatencyOffset = Constants.Radar.serverLatencyOffset
         let minutesUntilNext = 5 - (minute % 5)
-        // Add serverLatencyOffset to account for server latency
-        var secondsUntilNext = (minutesUntilNext * 60) - second + serverLatencyOffset
+        // Add the publish delay to account for server generation latency
+        var secondsUntilNext = (minutesUntilNext * 60) - second + publishDelaySeconds
         
-        // If we're already past the serverLatencyOffset mark in the current 5-min window, wait for the next one
+        // If we're already past this window's expected publish time, wait for the next one
         if secondsUntilNext > 300 {
             secondsUntilNext -= 300
         }
