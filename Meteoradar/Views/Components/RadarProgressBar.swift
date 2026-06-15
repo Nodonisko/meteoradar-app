@@ -160,8 +160,6 @@ struct RadarProgressBar: View {
             return // Already selected - no work needed
         }
         
-        print("Drag selecting new box \(clampedIndex): \(imageData.timestamp.radarTimestampString)")
-        
         // Perform the selection
         selectImage(imageData)
     }
@@ -196,11 +194,6 @@ struct ProgressBarBox: View {
         return Calendar.current.isDate(imageData.timestamp, equalTo: currentTimestamp, toGranularity: .minute)
     }
 
-    // log whole imageData
-    private var imageDataString: String {
-        return "imageData: \(imageData.timestamp.radarTimestampString), state: \(imageData.state), kind: \(imageData.kind), sourceTimestamp: \(imageData.sourceTimestamp.radarTimestampString), forecastTimestamp: \(imageData.forecastTimestamp.radarTimestampString)"
-    }
-    
     private var isEnabled: Bool {
         imageData.state == .success
     }
@@ -223,15 +216,11 @@ struct ProgressBarBox: View {
             .contentShape(Rectangle())
             .onTapGesture {
                 if isEnabled {
-                    print("Tap gesture triggered for: \(imageData.timestamp.radarTimestampString)")
                     handleSelection()
                 } else if isFailed {
                     // Show error toast when tapping on failed box
                     let errorMessage = buildErrorMessage()
                     onErrorTap?(errorMessage)
-                } else {
-                    print("Tap ignored - button not enabled")
-                    print("imageDataString: \(imageDataString)")
                 }
             }
     }
@@ -250,7 +239,6 @@ struct ProgressBarBox: View {
         case .loading, .retrying: return .yellow
         case .failed: return .red
         case .pending: return .gray
-        case .skipped: return .gray.opacity(0.6)
         }
     }
     
@@ -279,35 +267,24 @@ struct ProgressBarBox: View {
         case .loading, .retrying: return 0.8
         case .failed: return 0.7
         case .pending: return 0.4
-        case .skipped: return 0.3
         }
     }
     
     private func handleSelection() {
-        guard isEnabled else { 
-            print("Button disabled, ignoring selection")
-            return 
-        }
-        
-        print("Handling selection for timestamp: \(imageData.timestamp.radarTimestampString)")
-        
+        guard isEnabled else { return }
+
         // Stop animation if running
         if radarSequence.isAnimating {
-            print("Stopping animation")
             radarImageManager.stopAnimation()
         }
-        
+
         // Find the image in loadedImages and set it as current
         let loadedImages = radarSequence.loadedImages
-        for (index, loadedImage) in loadedImages.enumerated() {
-            if Calendar.current.isDate(loadedImage.timestamp, equalTo: imageData.timestamp, toGranularity: .minute) {
-                print("Found matching image at loadedImages index: \(index)")
-                radarSequence.currentImageIndex = index
-                return
-            }
+        if let index = loadedImages.firstIndex(where: {
+            Calendar.current.isDate($0.timestamp, equalTo: imageData.timestamp, toGranularity: .minute)
+        }) {
+            radarSequence.currentImageIndex = index
         }
-        
-        print("ERROR: Could not find selected image in loadedImages array")
     }
 }
 
@@ -360,7 +337,7 @@ struct ErrorToastView: View {
     
     // Add some sample images to show the progress bar
     let sampleTimestamps = Date.radarTimestamps(count: 12)
-    sequence.createPlaceholders(for: sampleTimestamps, productID: SettingsService.defaultRadarProductID)
+    sequence.syncObservedPlaceholders(for: sampleTimestamps, productID: SettingsService.defaultRadarProductID)
     
     // Set up different loading states for preview
     if sequence.images.count >= 8 {

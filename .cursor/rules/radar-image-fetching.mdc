@@ -1,9 +1,11 @@
 ---
-description: Critical rules for RadarImageManager to preserve core functionality
+description: Architecture and invariants for radar image fetching - preserve these when editing the fetch pipeline, if you need to diverge, always ask first.
 globs:
   [
     "**/RadarImageManager.swift",
     "**/RadarImageSequence.swift",
+    "**/NetworkService.swift",
+    "**/ImageCacheService.swift",
     "**/Date+RadarTime.swift",
   ]
 alwaysApply: true
@@ -11,11 +13,103 @@ alwaysApply: true
 
 # Radar Image Fetching
 
-- All times and dates are in UTC
-- New image is published every 5 minutes in time that is divisible by 5 (eg. 00:00, 00:05, 00:10, etc.)
-- Image might now be published imidiately because generating takes few seconds, so server might return 404 or some other error.
-- Sometimes server might be overloaded or down. Make sure to handle errors gracefully.
-- Smart Retry Logic: Each failed image retries once, then continues to older images
-- Sequential Loading: Images load from newest to oldest, one at a time (better for slow connections)
-- File System Caching: All downloaded images are cached to disk with automatic cleanup
-- Cache Management: 50MB limit, 7-day expiration, oldest files removed when space needed
+All times are UTC. A new image is published every 5 minutes on marks divisible
+by 5 (00:00, 00:05, …). Generation takes a few seconds and a country may publish
+several minutes late, so a just-passed mark can 404 — handle errors gracefully.
+
+## Core architecture (do not break)
+
+- A single idempotent `reconcile()` drives the whole pipeline:
+  sync observed placeholders → `syncForecastPlaceholders` → one sequential fetch
+  pass. It is safe to call repeatedly (dedup + disk cache prevent double
+  downloads); this is what keeps the logic small. Don't add parallel fetch paths.
+- Two timers feed `reconcile()`: `updateTimer` (fires at the next publish
+  boundary) and `retryTimer` (re-runs while any frame still has retry budget).
+- One fetch pass at a time via `fetchCancellable`. `NetworkService.fetchFrames`
+  is a strict queue (`flatMap(maxPublishers: .max(1))`): one request in flight,
+  processed in the order given (callers pass newest-first).
+- Frame identity is `RadarFrameID` (kind + 5-min source mark). Match network
+  results to placeholders with `frameID` — NEVER by recomputing a URL/cache key.
+  `RadarFrameID` is quality-independent so matching survives a quality change.
+- `fetchFrames` is the single owner of "deliver each result on the main queue".
+  Do not add redundant `receive(on:)` hops in the manager or per-request path.
+
+## Observed images
+
+- Sequential, newest → oldest; the prioritized queue must stay visible (exactly
+  one box shows as loading at a time — frames are marked loading lazily via the
+  `onStart` callback, not all at once).
+- Per-product `publishDelaySeconds` is a soft lower bound: it shifts both the
+  target timestamp (`Date.radarTimestamps`) and the update-timer firing
+  (`secondsUntilNextRadarUpdate`) so we don't ping before an image can exist.
+
+## Forecast images
+
+- Observed-before-forecast: a generation's forecast is fetched only after its
+  observed image has loaded (gate in `framesPendingFetch`: forecast source must
+  be ≤ newest loaded observed).
+- Always seed the newest generation's forecast placeholders (fixed box count);
+  fetching stays gated, so seeding never fetches early.
+- Keep the previous forecast on screen until the new one loads its first frame
+  (`displayedForecastSource`) — no flicker at the 5-minute handoff.
+- Cold-start fallback: if the newest generation's forecast isn't generated yet
+  and nothing is on screen, also seed the previous generation (server keeps it)
+  instead of showing red boxes; promote to newest once it arrives.
+- Anchored to the newest loaded observed; fetched close → far (+10 … +60 min).
+
+## Selection (RadarImageSequence)
+
+`currentImageIndex` is positional, but `loadedImages` reshuffles as frames load,
+so re-anchor on every change via `restoreSelection` (matching by `RadarFrameID`,
+NEVER by timestamp — an observed and a forecast can share a wall-clock time).
+Net behavior:
+
+- Sitting on a forecast → a new observed arrives → snap to that newest observed.
+- Sitting on the newest observed → stays following newest.
+- Scrubbed back to an _older_ observed frame → position preserved (not at the
+  leading edge, so no jump).
+- Background forecast frames loading while on a forecast → no jump (not observed),
+  so the user keeps watching their forecast until a real new observation lands.
+- During animation the jump is suppressed so it doesn't fight the play cursor.
+- Forecast generation handoff: if the exact offset hasn't loaded yet in the new
+  generation, keep the nearest forecast offset (`nearestForecastIndex`) instead
+  of snapping to newest.
+
+"Leading edge" = newest observed OR any forecast (the future). The observed frame
+of a generation publishes before its forecast, so a new 5-min mark lands you on
+the new observed first, then its forecast generation loads.
+
+## Retry & errors
+
+- Bounded retries, single cadence (`Constants.Radar.retryInterval`): observed
+  ~5 attempts, forecast ~10 (generation can lag). 404/HTTP errors settle a frame
+  as `failed` without breaking the rest.
+- Self-healing: the reconcile + retry loop runs until everything resolves.
+  `handlePassCompletion` fails any frame left stranded in `loading`, so there is
+  no "stuck grey box until manual reload".
+- `errorMessage` is only surfaced when nothing is displayable and no fetch/retry
+  is still possible.
+
+## Display (RadarImageSequence.timelineFrames)
+
+- Fixed box count: observed (`imageCount`) + one forecast generation's offsets.
+  The count must never change dynamically as frames load — that's the point of
+  placeholders.
+- Show a single coherent forecast generation, never two interleaved.
+
+## Lifecycle
+
+- Foreground: `resumeForForeground` realigns the timer and jumps back to the
+  newest frame (refetches); never leave the user on a stale selected frame.
+- Background: cancel timers and in-flight downloads (`pauseForBackground`).
+- Reload cleanly on product, interval, or image-quality change; never reuse the
+  previous product's frames (`removeAllImages`).
+
+## Network & caching
+
+- HTTP/3 priority: newest observed (<5 min) highest, forecast + recent observed
+  medium, historical observed (>30 min) lowest.
+- Request de-duplication: identical in-flight requests share one download.
+- File-system cache: 50 MB limit, 7-day expiration, served instantly on hit;
+  undecodable entries are dropped and refetched. Cache the original bytes
+  verbatim to preserve the embedded `GeoBox` PNG metadata.

@@ -28,9 +28,24 @@ struct RadarImageResult {
     let wasFromCache: Bool
 }
 
-enum RadarLoadingStrategy {
-    case sequential
-    case parallel(maxConcurrent: Int)
+/// A single radar frame to fetch. Lets `fetchFrames` pull observed and forecast
+/// frames through one sequential pipeline instead of two specialized methods.
+struct RadarFrameSpec {
+    let kind: RadarFrameKind
+    /// Source (publish) timestamp. For observed frames this equals the frame's
+    /// own timestamp; for forecasts it's the observed image the forecast is based on.
+    let sourceTimestamp: Date
+
+    var frameID: RadarFrameID {
+        RadarFrameID(kind: kind, source: sourceTimestamp)
+    }
+}
+
+extension RadarImageResult {
+    /// Stable identity used to match this result back to its placeholder.
+    var frameID: RadarFrameID {
+        RadarFrameID(kind: kind, source: sourceTimestamp)
+    }
 }
 
 // MARK: - Network Service
@@ -283,43 +298,41 @@ class NetworkService: NSObject, URLSessionDataDelegate {
                 ))
                 .eraseToAnyPublisher()
             }
-            .receive(on: DispatchQueue.main)
             .eraseToAnyPublisher()
     }
     
-    /// Fetch multiple radar images with different loading strategies
-    /// Returns individual results as they complete (streaming), not batched
-    func fetchRadarSequence(
-        timestamps: [Date], 
+    /// Fetch a mixed list of radar frames one at a time, streaming each result as
+    /// it completes. `maxPublishers: .max(1)` makes this a strict queue: only one
+    /// request is ever in flight, processed in the order given (callers pass them
+    /// newest-first), so on a slow link the most important frame downloads first.
+    /// Already-cached or in-flight frames are deduped/served by `fetchRadarFrame`.
+    ///
+    /// `onStart` fires for each frame exactly when its turn in the queue begins,
+    /// letting the caller reflect the queue in the UI (one frame loading at a time)
+    /// instead of marking everything at once.
+    ///
+    /// Each frame's result is hopped onto the main queue here (the single place
+    /// that owns this guarantee). That keeps `onStart`/results on the main thread
+    /// as the queue advances, and makes an all-cached pass complete asynchronously
+    /// so the caller's subscription is fully assigned before it sees completion.
+    func fetchFrames(
+        _ frames: [RadarFrameSpec],
         productID: String,
-        strategy: RadarLoadingStrategy = .sequential
+        onStart: ((RadarFrameSpec) -> Void)? = nil
     ) -> AnyPublisher<RadarImageResult, Never> {
-        
-        switch strategy {
-        case .sequential:
-            // Sequential loading: one at a time, results stream in as each completes
-            return timestamps.publisher
-                .flatMap(maxPublishers: .max(1)) { timestamp in
-                    self.fetchRadarImage(for: timestamp, productID: productID)
+        return frames.publisher
+            .flatMap(maxPublishers: .max(1)) { frame -> AnyPublisher<RadarImageResult, Never> in
+                onStart?(frame)
+                let request: AnyPublisher<RadarImageResult, Never>
+                switch frame.kind {
+                case .observed:
+                    request = self.fetchRadarImage(for: frame.sourceTimestamp, productID: productID)
+                case .forecast(let offset):
+                    request = self.fetchForecastImage(sourceTimestamp: frame.sourceTimestamp, offsetMinutes: offset, productID: productID)
                 }
-                .eraseToAnyPublisher()
-            
-        case .parallel(let maxConcurrent):
-            // Parallel loading: multiple concurrent, results stream in as each completes
-            return timestamps.publisher
-                .flatMap(maxPublishers: .max(maxConcurrent)) { timestamp in
-                    self.fetchRadarImage(for: timestamp, productID: productID)
-                }
-                .eraseToAnyPublisher()
-        }
-    }
-
-    /// Fetch forecast images sequentially, streaming results as they complete
-    func fetchForecastSequence(sourceTimestamp: Date, offsets: [Int], productID: String) -> AnyPublisher<RadarImageResult, Never> {
-        let sortedOffsets = offsets.sorted()
-        return sortedOffsets.publisher
-            .flatMap(maxPublishers: .max(1)) { offset -> AnyPublisher<RadarImageResult, Never> in
-                self.fetchForecastImage(sourceTimestamp: sourceTimestamp, offsetMinutes: offset, productID: productID)
+                return request
+                    .receive(on: DispatchQueue.main)
+                    .eraseToAnyPublisher()
             }
             .eraseToAnyPublisher()
     }

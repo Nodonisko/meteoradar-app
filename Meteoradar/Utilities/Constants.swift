@@ -56,15 +56,13 @@ struct Constants {
         // Animation configuration
         static let imageCount = 10 // Number of radar images to fetch and animate
         static let animationInterval: TimeInterval = 0.5 // Seconds between frames for rain movement visualization
-        static let updateInterval: TimeInterval = 300 // 5 minutes in seconds
-        static let retryInterval: TimeInterval = 10 // Retry every 10 seconds if image not available
         static let radarImageInterval: TimeInterval = RadarSharedConstants.radarIntervalSeconds // New radar image every 5 minutes
-        
-        // Sequential loading configuration
-        static let maxRetryAttempts = 5 // Observed frames: initial attempt + one retry
-        static let retryDelay: TimeInterval = 5.0 // Observed frame retry delay
-        static let forecastMaxRetryAttempts = 10 // Forecast frames: allow retries for roughly one minute
-        static let forecastRetryDelay: TimeInterval = 10.0 // Forecast frames wait longer before retry
+
+        // Retry configuration. A single cadence drives all retries; per-kind
+        // attempt budgets below bound how long a frame keeps retrying.
+        static let retryInterval: TimeInterval = 10 // Delay between retry passes
+        static let maxRetryAttempts = 5 // Observed frames: ~50s of retries
+        static let forecastMaxRetryAttempts = 10 // Forecast frames: ~100s (generation can lag)
         
         // Forecast configuration
         static let forecastHorizonMinutes: Int = 60 // Forecast range into future

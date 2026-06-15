@@ -15,11 +15,10 @@ enum ImageLoadingState: Equatable {
     case success          // Successfully loaded
     case failed(Error, attemptCount: Int)  // Failed with error and retry count
     case retrying(attemptCount: Int)        // Currently retrying
-    case skipped          // Skipped due to consecutive failures or other logic
     
     static func == (lhs: ImageLoadingState, rhs: ImageLoadingState) -> Bool {
         switch (lhs, rhs) {
-        case (.pending, .pending), (.loading, .loading), (.success, .success), (.skipped, .skipped):
+        case (.pending, .pending), (.loading, .loading), (.success, .success):
             return true
         case (.failed(_, let lCount), .failed(_, let rCount)):
             return lCount == rCount
@@ -62,6 +61,21 @@ extension RadarFrameKind {
     }
 }
 
+/// Stable identity of a radar frame within a product: its kind (observed, or a
+/// forecast at a given offset) plus the 5-minute publish mark it belongs to.
+/// Deliberately quality-independent, so a network result always matches its
+/// placeholder even if the image-quality setting changed while it was in flight.
+/// All source timestamps are radar boundaries, so `Date` equality is exact.
+struct RadarFrameID: Hashable {
+    let kind: RadarFrameKind
+    let source: Date
+
+    init(kind: RadarFrameKind, source: Date) {
+        self.kind = kind
+        self.source = source.roundedToNearestRadarTime
+    }
+}
+
 class RadarImageData: ObservableObject {
     let timestamp: Date
     let urlString: String
@@ -80,25 +94,19 @@ class RadarImageData: ObservableObject {
     // Loading metadata
     @Published var state: ImageLoadingState = .pending
     @Published var attemptCount: Int = 0
-    @Published var startTime: Date?
-    @Published var endTime: Date?
     @Published var lastError: Error?
-    
-    // Cache metadata (ready for future file system caching)
-    @Published var isCached: Bool = false
-    @Published var cacheDate: Date?
+
+    /// Stable, quality-independent identity used to match network results back to
+    /// this placeholder and to compare frames without `Calendar` date math.
+    var frameID: RadarFrameID {
+        RadarFrameID(kind: kind, source: sourceTimestamp)
+    }
+
+    /// Filename used both as the disk-cache key and as a stable SwiftUI list id.
     var cacheKey: String {
         guard let url = URL(string: urlString) else { return urlString }
         return RadarCacheHelpers.cacheFilename(for: url)
     }
-    
-    // Source tracking for debugging/UI
-    enum ImageSource {
-        case cache
-        case network
-        case unknown
-    }
-    @Published var imageSource: ImageSource = .unknown
     
     init(timestamp: Date, urlString: String, kind: RadarFrameKind, sourceTimestamp: Date, forecastTimestamp: Date) {
         self.timestamp = timestamp
@@ -106,24 +114,6 @@ class RadarImageData: ObservableObject {
         self.kind = kind
         self.sourceTimestamp = sourceTimestamp
         self.forecastTimestamp = forecastTimestamp
-    }
-    
-    // Legacy initializer for backward compatibility
-    init(timestamp: Date, image: UIImage, urlString: String, kind: RadarFrameKind, sourceTimestamp: Date, forecastTimestamp: Date) {
-        self.timestamp = timestamp
-        self.urlString = urlString
-        self.kind = kind
-        self.sourceTimestamp = sourceTimestamp
-        self.forecastTimestamp = forecastTimestamp
-        self.image = image
-        self.state = .success
-        self.imageSource = .network
-    }
-    
-    // Computed properties
-    var loadDuration: TimeInterval? {
-        guard let start = startTime, let end = endTime else { return nil }
-        return end.timeIntervalSince(start)
     }
     
     var isLoading: Bool {
@@ -157,19 +147,6 @@ class RadarImageData: ObservableObject {
             return false
         }
     }
-    
-    // Cache-specific methods (ready for future implementation)
-    func markAsCached(date: Date = Date()) {
-        isCached = true
-        cacheDate = date
-        imageSource = .cache
-    }
-    
-    func markAsNetworkLoaded() {
-        imageSource = .network
-        isCached = false // Will be cached after successful load
-    }
-
 }
 
 class RadarImageSequence: ObservableObject {
@@ -221,7 +198,7 @@ class RadarImageSequence: ObservableObject {
             return observed
         }
         let forecasts = images
-            .filter { $0.hasSucceeded && $0.kind.isForecast && Calendar.current.isDate($0.sourceTimestamp, equalTo: forecastSource, toGranularity: .minute) }
+            .filter { $0.hasSucceeded && $0.kind.isForecast && $0.sourceTimestamp.roundedToNearestRadarTime == forecastSource.roundedToNearestRadarTime }
             .sorted { lhs, rhs in
                 switch (lhs.kind, rhs.kind) {
                 case (.forecast(let leftOffset), .forecast(let rightOffset)):
@@ -235,21 +212,32 @@ class RadarImageSequence: ObservableObject {
     }
 
     /// Frames that make up the progress bar / timeline UI: every observed frame
-    /// (in any loading state) plus the forecast frames for a SINGLE source. The
-    /// retained previous-generation forecasts (kept in `images` for display
-    /// continuity) are excluded so the bar shows one coherent timeline instead of
-    /// two interleaved generations. Prefers the displayed (loaded) source; before
-    /// any forecast has loaded it falls back to the newest source we're fetching
-    /// so in-progress boxes still appear.
+    /// plus the forecast frames for exactly ONE source. The number of boxes is
+    /// fixed (observed count + forecast offset count): forecast placeholders are
+    /// always seeded for the newest generation, and since every generation we
+    /// create carries its full set of offsets, picking a single source always
+    /// yields the same number of forecast slots regardless of load state.
     var timelineFrames: [RadarImageData] {
         let observed = images.filter { $0.kind.isObserved }
-        let forecastSource = displayedForecastSource
-            ?? images.filter { $0.kind.isForecast }.map { $0.sourceTimestamp }.max()
-        guard let forecastSource else { return observed }
+        guard let source = timelineForecastSource else { return observed }
         let forecasts = images.filter {
-            $0.kind.isForecast && Calendar.current.isDate($0.sourceTimestamp, equalTo: forecastSource, toGranularity: .minute)
+            $0.kind.isForecast && $0.sourceTimestamp.roundedToNearestRadarTime == source
         }
         return observed + forecasts
+    }
+
+    /// The single forecast generation the timeline displays: the one we've loaded
+    /// (`displayedForecastSource`), or - before anything loads - the newest one
+    /// present. Always resolves to a source with a full set of offsets, so the box
+    /// count never changes as frames load.
+    private var timelineForecastSource: Date? {
+        if let displayed = displayedForecastSource {
+            return displayed.roundedToNearestRadarTime
+        }
+        return images
+            .filter { $0.kind.isForecast }
+            .map { $0.sourceTimestamp.roundedToNearestRadarTime }
+            .max()
     }
     
     var currentImage: UIImage? {
@@ -352,110 +340,225 @@ class RadarImageSequence: ObservableObject {
         // Go to newest image (index 0 since loadedImages is sorted newest first)
         currentImageIndex = 0
     }
+
+    // MARK: - Selection preservation
+
+    /// Re-anchors `currentImageIndex` after `loadedImages` changed so the user
+    /// keeps viewing the same frame. `currentImageIndex` is positional, but
+    /// `loadedImages` reshuffles as frames load (a new observed shifts everything
+    /// down, a forecast handoff swaps the whole forecast tail), so the raw index
+    /// would otherwise drift onto a neighbouring frame.
+    ///
+    /// Matching is by `RadarFrameID` (kind + source), never by timestamp: an
+    /// observed and a forecast frame can share a wall-clock time, and timestamp
+    /// matching would jump a forecast selection onto the observed frame.
+    ///
+    /// - `wasOnNewest`: stay pinned to newest (follow-newest) if we were on it.
+    /// - exact `frameID`: same observed moment / same forecast frame still shown.
+    /// - forecast fallback: the generation rolled over, so keep the nearest
+    ///   forecast offset in the now-displayed generation rather than snapping to
+    ///   newest.
+    /// - otherwise: the frame is gone (rolled off the window) -> newest.
+    private func restoreSelection(previous: RadarImageData?, wasOnNewest: Bool) {
+        guard !wasOnNewest, let previous else {
+            currentImageIndex = 0
+            return
+        }
+        let frames = loadedImages
+        if let index = frames.firstIndex(where: { $0.frameID == previous.frameID }) {
+            currentImageIndex = index
+            return
+        }
+        if let offset = previous.kind.forecastOffsetMinutes,
+           let index = nearestForecastIndex(to: offset, in: frames) {
+            currentImageIndex = index
+            return
+        }
+        currentImageIndex = 0
+    }
+
+    /// Index of the loaded forecast frame whose offset is closest to `offset`,
+    /// used to keep a forecast selection in place across a generation handoff
+    /// when the exact offset hasn't loaded yet in the new generation.
+    private func nearestForecastIndex(to offset: Int, in frames: [RadarImageData]) -> Int? {
+        frames.enumerated()
+            .filter { $0.element.kind.isForecast }
+            .min { lhs, rhs in
+                abs((lhs.element.kind.forecastOffsetMinutes ?? 0) - offset)
+                    < abs((rhs.element.kind.forecastOffsetMinutes ?? 0) - offset)
+            }?
+            .offset
+    }
     
-    // Management methods for sequential loading
-    func createPlaceholders(for timestamps: [Date], forecastOffsets: [Int] = [], productID: String) {
-        // Remember what we're currently viewing before making changes
-        let currentViewingTimestamp = currentTimestamp
-        
-        // Build list of images we need (reusing existing successful ones where possible)
-        var newImages: [RadarImageData] = []
-        
+    /// Brings the observed frames in line with `timestamps` (newest first),
+    /// reusing existing frames (in any state, so retries/successes are preserved)
+    /// and creating pending placeholders for new ones. Forecast frames are NOT
+    /// created here - they're seeded by the manager only for an observed source
+    /// that has actually loaded, which enforces "observed before forecast".
+    ///
+    /// Idempotent: if nothing structurally changed the `images` array is left
+    /// untouched, so this can be called on every reconcile without churning the UI
+    /// or resetting in-flight retry state.
+    func syncObservedPlaceholders(for timestamps: [Date], productID: String) {
+        var rebuilt: [RadarImageData] = []
+
         for timestamp in timestamps {
-            // Try to reuse existing successful observed image
-            if let existingObserved = images.first(where: {
-                $0.kind == .observed && 
-                Calendar.current.isDate($0.timestamp, equalTo: timestamp, toGranularity: .minute) &&
-                $0.hasSucceeded
-            }) {
-                newImages.append(existingObserved)
+            let targetID = RadarFrameID(kind: .observed, source: timestamp)
+            if let existing = images.first(where: { $0.frameID == targetID }) {
+                rebuilt.append(existing)
             } else {
-                // Create new placeholder only if we don't have a successful one
                 let urlString = Constants.Radar.observedURL(for: timestamp, quality: SettingsService.shared.imageQuality, productID: productID)
-                let observedData = RadarImageData(
+                rebuilt.append(RadarImageData(
                     timestamp: timestamp,
                     urlString: urlString,
                     kind: .observed,
                     sourceTimestamp: timestamp,
                     forecastTimestamp: timestamp
-                )
-                newImages.append(observedData)
+                ))
             }
-            
-            // Handle forecast images for the newest timestamp
-            if timestamp == timestamps.first {
-                for offset in forecastOffsets {
-                    // Try to reuse existing successful forecast image
-                    if let existingForecast = images.first(where: {
-                        $0.kind == .forecast(offsetMinutes: offset) && 
-                        Calendar.current.isDate($0.sourceTimestamp, equalTo: timestamp, toGranularity: .minute) &&
-                        $0.hasSucceeded
-                    }) {
-                        newImages.append(existingForecast)
-                    } else {
-                        // Create new placeholder only if we don't have a successful one
-                        let forecastTimestamp = timestamp.addingTimeInterval(TimeInterval(offset * 60))
-                        let urlString = Constants.Radar.forecastURL(for: timestamp, offsetMinutes: offset, quality: SettingsService.shared.imageQuality, productID: productID)
-                        let forecastData = RadarImageData(
-                            timestamp: forecastTimestamp,
-                            urlString: urlString,
-                            kind: .forecast(offsetMinutes: offset),
-                            sourceTimestamp: timestamp,
-                            forecastTimestamp: forecastTimestamp
-                        )
-                        newImages.append(forecastData)
-                    }
+        }
+
+        // Carry over forecast frames whose source is still relevant: the current
+        // observed window (the anchor's forecasts live here), the previous-of-newest
+        // generation (kept warm for the 5-minute handoff), and whatever we're
+        // displaying now (e.g. a cold-start fallback that lags the newest observed).
+        var relevantSources = Set(timestamps.map { $0.roundedToNearestRadarTime })
+        if let newest = timestamps.first { relevantSources.insert(newest.previousRadarTime.roundedToNearestRadarTime) }
+        if let displayed = displayedForecastSource { relevantSources.insert(displayed.roundedToNearestRadarTime) }
+        let retainedForecasts = images.filter { data in
+            data.kind.isForecast && relevantSources.contains(data.sourceTimestamp.roundedToNearestRadarTime)
+        }
+        rebuilt.append(contentsOf: retainedForecasts)
+
+        // Skip the assignment when nothing changed, to avoid needless UI updates.
+        if rebuilt.count == images.count && zip(rebuilt, images).allSatisfy({ $0 === $1 }) {
+            return
+        }
+
+        let previousSelection = currentImageData
+        let wasOnNewest = currentImageIndex == 0
+        images = rebuilt
+        restoreSelection(previous: previousSelection, wasOnNewest: wasOnNewest)
+    }
+    
+    /// Creates a single forecast placeholder for a given source + offset.
+    private func makeForecastPlaceholder(source: Date, offset: Int, productID: String) -> RadarImageData {
+        let forecastTimestamp = source.addingTimeInterval(TimeInterval(offset * 60))
+        let urlString = Constants.Radar.forecastURL(for: source, offsetMinutes: offset, quality: SettingsService.shared.imageQuality, productID: productID)
+        return RadarImageData(
+            timestamp: forecastTimestamp,
+            urlString: urlString,
+            kind: .forecast(offsetMinutes: offset),
+            sourceTimestamp: source,
+            forecastTimestamp: forecastTimestamp
+        )
+    }
+
+    /// Seeds the forecast placeholders for a reconcile pass. Owns all forecast
+    /// generation policy so the manager just calls this once:
+    ///
+    /// 1. Always seed the newest generation's slots so the timeline shows a fixed
+    ///    number of forecast boxes from the start. Fetching them is still gated on
+    ///    the matching observed frame existing (see `framesPendingFetch`), so this
+    ///    never fetches a forecast before its observed frame.
+    /// 2. Cold-start fallback: if the newest generation's forecast isn't generated
+    ///    yet and nothing is on screen, also seed the previous generation (which the
+    ///    server keeps) so we show that instead of red boxes until the newest
+    ///    arrives. `displayedForecastSource` shows whichever loads and promotes to
+    ///    the newest once it does.
+    func syncForecastPlaceholders(newestSource: Date?, offsets: [Int], productID: String) {
+        guard let newestSource else { return }
+        ensureForecastPlaceholders(source: newestSource, offsets: offsets, productID: productID)
+
+        if let anchor = newestSuccessfulObservedImage?.timestamp, shouldFallbackForecast(anchor: anchor) {
+            ensureForecastPlaceholders(source: anchor.previousRadarTime, offsets: offsets, productID: productID)
+        }
+    }
+
+    /// Ensures forecast placeholders exist for the given source, creating any that
+    /// are missing. Forecast frames are never created by `syncObservedPlaceholders`,
+    /// so they only ever exist for a source `syncForecastPlaceholders` seeded.
+    private func ensureForecastPlaceholders(source: Date, offsets: [Int], productID: String) {
+        let missing = offsets.filter { offset in
+            let id = RadarFrameID(kind: .forecast(offsetMinutes: offset), source: source)
+            return !images.contains { $0.frameID == id }
+        }
+        guard !missing.isEmpty else { return }
+        images.append(contentsOf: missing.map { makeForecastPlaceholder(source: source, offset: $0, productID: productID) })
+    }
+
+    // MARK: - Fetch coordination
+
+    /// Frames ready to be fetched right now: freshly created placeholders that
+    /// haven't been attempted. Failed frames are NOT included here - they wait for
+    /// the retry timer to promote them, so a completed pass never re-fires them
+    /// immediately. Ordered observed-newest-first, then forecast by offset, so the
+    /// frames the user is most likely looking at load first.
+    ///
+    /// Forecast frames are gated: we only fetch a generation that's at or before
+    /// the newest observed image we actually have. A generation is published as a
+    /// unit (observed image + its forecast), so until its observed image exists the
+    /// forecast can't either - this is what keeps "observed before forecast" true
+    /// even though the forecast placeholders are seeded up front for display.
+    var framesPendingFetch: [RadarImageData] {
+        let newestLoadedObserved = images
+            .filter { $0.kind.isObserved && $0.hasSucceeded }
+            .map { $0.timestamp }
+            .max()
+
+        return images
+            .filter { frame in
+                guard frame.state == .pending else { return false }
+                if frame.kind.isForecast {
+                    guard let newestLoadedObserved else { return false }
+                    return frame.sourceTimestamp <= newestLoadedObserved
                 }
-            }
-        }
-        
-        // Keep the previous generation's successfully-loaded forecasts so the
-        // displayed forecast doesn't vanish during the handoff to a new source.
-        // They live for one extra cycle and `loadedImages` only promotes the new
-        // source once it has produced its first frame.
-        if let newestTimestamp = timestamps.first {
-            let previousSource = newestTimestamp.previousRadarTime
-            let retainedForecasts = images.filter { data in
-                data.kind.isForecast &&
-                data.hasSucceeded &&
-                Calendar.current.isDate(data.sourceTimestamp, equalTo: previousSource, toGranularity: .minute) &&
-                !newImages.contains(where: { $0 === data })
-            }
-            newImages.append(contentsOf: retainedForecasts)
-        }
-        
-        images = newImages
-        
-        // Restore the viewing state to the same timestamp if it still exists in loaded images
-        if let currentTimestamp = currentViewingTimestamp,
-           let newIndex = loadedImages.firstIndex(where: { 
-               Calendar.current.isDate($0.timestamp, equalTo: currentTimestamp, toGranularity: .minute) 
-           }) {
-            currentImageIndex = newIndex
-            print("RadarImageSequence: Preserved viewing timestamp \(currentTimestamp.radarTimestampString) at new index \(newIndex)")
-        } else {
-            // Fallback to newest available image (index 0)
-            currentImageIndex = 0
-            print("RadarImageSequence: Reset to newest image (index 0) - previous timestamp no longer available")
-        }
-    }
-    
-    func getNextPendingImage() -> RadarImageData? {
-        // Return first image that needs loading (newest first)
-        return images.first { image in
-            switch image.state {
-            case .pending where image.shouldRetry, .failed where image.shouldRetry:
                 return true
-            default:
-                return false
             }
+            .sorted { lhs, rhs in
+                if lhs.kind.sortPriority != rhs.kind.sortPriority {
+                    return lhs.kind.sortPriority < rhs.kind.sortPriority
+                }
+                if lhs.kind.isObserved {
+                    return lhs.timestamp > rhs.timestamp // newest observed first
+                }
+                return lhs.forecastTimestamp < rhs.forecastTimestamp // nearest forecast first
+            }
+    }
+
+    /// Any failed frame that still has retry budget left.
+    var hasRetryableFrames: Bool {
+        images.contains { $0.hasFailed && $0.shouldRetry }
+    }
+
+    /// Moves retryable failures back to `pending` so the next fetch pass picks
+    /// them up. Attempt counts are preserved so the budget keeps shrinking.
+    func promoteRetryableToPending() {
+        for image in images where image.hasFailed && image.shouldRetry {
+            image.state = .pending
+            image.lastError = nil
         }
     }
-    
-    func getFailedImages() -> [RadarImageData] {
-        return images.filter { $0.hasFailed && $0.shouldRetry }
+
+    /// Locates the placeholder a network result belongs to by its stable frame
+    /// identity (kind + source mark). The manager has already filtered the result
+    /// to the current product, and the sequence only holds current-product frames.
+    func placeholder(for result: RadarImageResult) -> RadarImageData? {
+        images.first { $0.frameID == result.frameID }
     }
-    
+
+    /// True when the newest forecast generation has been tried but isn't available
+    /// yet and nothing is on screen - the trigger for the cold-start fallback to
+    /// the previous generation (which the server keeps until the new one exists).
+    func shouldFallbackForecast(anchor: Date) -> Bool {
+        guard displayedForecastSource == nil else { return false }
+        let frames = forecastImages(for: anchor)
+        guard !frames.isEmpty,
+              !frames.contains(where: { $0.hasSucceeded }),
+              !frames.contains(where: { $0.isLoading }) else { return false }
+        return frames.contains { $0.attemptCount > 0 }
+    }
+
     /// The newest observed frame that has actually loaded. Used to anchor the
     /// forecast to real data rather than a not-yet-arrived placeholder.
     var newestSuccessfulObservedImage: RadarImageData? {
@@ -464,51 +567,38 @@ class RadarImageSequence: ObservableObject {
             .max { $0.timestamp < $1.timestamp }
     }
     
-    func forecastImages(for sourceTimestamp: Date) -> [RadarImageData] {
-        return images.filter { data in
-            guard case .forecast = data.kind else { return false }
-            return Calendar.current.isDate(data.sourceTimestamp, equalTo: sourceTimestamp, toGranularity: .minute)
-        }
-        .sorted { lhs, rhs in
-            switch (lhs.kind, rhs.kind) {
-            case (.forecast(let lOffset), .forecast(let rOffset)):
-                if lOffset != rOffset { return lOffset < rOffset }
-                return lhs.forecastTimestamp < rhs.forecastTimestamp
-            default:
-                return lhs.forecastTimestamp < rhs.forecastTimestamp
-            }
+    private func forecastImages(for sourceTimestamp: Date) -> [RadarImageData] {
+        images.filter { data in
+            data.kind.isForecast && data.sourceTimestamp.roundedToNearestRadarTime == sourceTimestamp.roundedToNearestRadarTime
         }
     }
-    
-    var hasLoadingObservedImages: Bool {
-        return images.contains { data in
-            if case .observed = data.kind {
-                return data.isLoading
-            }
-            return false
-        }
-    }
-    
-    func hasImage(for timestamp: Date) -> Bool {
-        return images.contains { 
-            Calendar.current.isDate($0.timestamp, equalTo: timestamp, toGranularity: .minute) && $0.hasSucceeded
-        }
-    }
-    
-    // Update image from cache or network
-    func updateImage(_ imageData: RadarImageData, with image: UIImage, geoBox: GeoBounds?, fromCache: Bool = false) {
+
+    /// Marks a placeholder loaded with its decoded image and parsed bounds.
+    /// Loading a frame changes `loadedImages` (a new observed shifts the list, the
+    /// first frame of a new generation swaps the forecast tail), so the selection
+    /// is re-anchored to keep the user on the frame they were viewing.
+    func updateImage(_ imageData: RadarImageData, with image: UIImage, geoBox: GeoBounds?) {
+        let previousSelection = currentImageData
+        let wasOnNewest = currentImageIndex == 0
         imageData.image = image
         imageData.geoBox = geoBox
         imageData.state = .success
-        imageData.endTime = Date()
         imageData.attemptCount = 0
         imageData.lastError = nil
-        
-        if fromCache {
-            imageData.markAsCached()
-        } else {
-            imageData.markAsNetworkLoaded()
+
+        // Follow-newest, including from a forecast: when a fresh observed frame
+        // becomes the newest available and the user is at the leading edge of the
+        // timeline (newest observed, or any forecast - i.e. the "future"), jump to
+        // it. Scrubbing back to an older observed frame opts out and keeps that
+        // position. Suppressed while animating so it doesn't fight the play cursor.
+        let arrivedNewestObserved = imageData.kind.isObserved && imageData === loadedImages.first
+        let wasAtLeadingEdge = wasOnNewest || (previousSelection?.kind.isForecast ?? false)
+        if arrivedNewestObserved && wasAtLeadingEdge && !isAnimating {
+            currentImageIndex = 0
+            return
         }
+
+        restoreSelection(previous: previousSelection, wasOnNewest: wasOnNewest)
     }
     
     /// Removes all frames. Used when the radar product changes - frames from the
@@ -517,16 +607,6 @@ class RadarImageSequence: ObservableObject {
         images = []
         currentImageIndex = 0
         isAnimating = false
-    }
-    
-    func removeImage(at index: Int) {
-        guard index >= 0 && index < images.count else { return }
-        images.remove(at: index)
-        
-        // Adjust current index if needed
-        if currentImageIndex >= images.count {
-            currentImageIndex = max(0, images.count - 1)
-        }
     }
 
 }
