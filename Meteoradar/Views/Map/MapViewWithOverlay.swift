@@ -94,21 +94,31 @@ struct MapViewWithOverlay: UIViewRepresentable {
     func updateUIView(_ mapView: MKMapView, context: Context) {
         context.coordinator.parent = self
 
-        let sequence = radarImageManager.radarSequence
-        if let geoBox = sequence.currentGeoBox, geoBox != context.coordinator.appliedBounds {
+        // Resolve the displayed frame once. `currentGeoBox`, `currentImage` and
+        // `currentTimestamp` each rebuild `loadedImages` independently, so reading
+        // them from a single `currentImageData` avoids repeating that work several
+        // times per update. This is local to this call - nothing is cached across
+        // updates, so there's no staleness risk.
+        let currentData = radarImageManager.radarSequence.currentImageData
+        let currentImage = currentData?.image
+        let currentTimestamp = currentData?.timestamp
+        let currentGeoBox = currentData?.geoBox
+        let isForecast = currentData?.kind.isForecast ?? false
+
+        if let geoBox = currentGeoBox, geoBox != context.coordinator.appliedBounds {
             // The displayed frame's bounds changed (first frame after a switch, or
             // the backend re-projected mid-sequence). Reposition both overlays.
             // This is the rare path; in steady state bounds are identical frame-to-frame.
             context.coordinator.applyBounds(geoBox, recenterTo: nil)
         } else if context.coordinator.shouldUpdateRadar(
-            currentImage: sequence.currentImage,
-            timestamp: sequence.currentTimestamp
+            currentImage: currentImage,
+            timestamp: currentTimestamp
         ) {
             // Common path: bounds unchanged, just swap the overlay's image.
             context.coordinator.updateRadarImage(
-                radarImageManager: radarImageManager,
-                currentImage: sequence.currentImage,
-                timestamp: sequence.currentTimestamp
+                currentImage: currentImage,
+                timestamp: currentTimestamp,
+                isForecast: isForecast
             )
         }
         
@@ -119,9 +129,9 @@ struct MapViewWithOverlay: UIViewRepresentable {
         if let heading = userHeading, heading.headingAccuracy >= 0 {
             context.coordinator.updateUserHeading(heading)
         }
-        
-        // Update map appearance when setting changes
-        applyMapAppearance(to: mapView)
+
+        // Map appearance is applied initially in makeUIView and reactively via the
+        // $mapAppearance subscription, so it must NOT be re-applied on every update.
 
         // Keep custom markers in sync without recreating unchanged annotations
         context.coordinator.syncCustomMarkers(customMarkers, on: mapView)
@@ -273,10 +283,7 @@ struct MapViewWithOverlay: UIViewRepresentable {
             }
         }
         
-        func updateRadarImage(radarImageManager: RadarImageManager, currentImage: UIImage?, timestamp: Date?) {
-            // Check if current image is a forecast
-            let isForecast = radarImageManager.radarSequence.currentImageData?.kind.isForecast ?? false
-            
+        func updateRadarImage(currentImage: UIImage?, timestamp: Date?, isForecast: Bool) {
             // Simply update the image in the existing overlay
             radarOverlay?.updateImage(currentImage, timestamp: timestamp, isForecast: isForecast)
             // Trigger a redraw of the renderer
