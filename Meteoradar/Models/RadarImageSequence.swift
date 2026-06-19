@@ -211,33 +211,67 @@ class RadarImageSequence: ObservableObject {
         return observed + forecasts
     }
 
-    /// Frames that make up the progress bar / timeline UI: every observed frame
-    /// plus the forecast frames for exactly ONE source. The number of boxes is
-    /// fixed (observed count + forecast offset count): forecast placeholders are
-    /// always seeded for the newest generation, and since every generation we
-    /// create carries its full set of offsets, picking a single source always
-    /// yields the same number of forecast slots regardless of load state.
+    /// Frames that make up the progress bar / timeline UI, in display order:
+    /// observed oldest → newest, then the forecast frames for exactly ONE source
+    /// by ascending offset. The number of boxes is fixed (observed count +
+    /// forecast offset count): forecast placeholders are always seeded for the
+    /// newest generation, and since every generation we create carries its full
+    /// set of offsets, picking a single source always yields the same number of
+    /// forecast slots regardless of load state.
+    ///
+    /// The order is built structurally (observed group, then forecast group) and
+    /// NOT by raw `timestamp`: a retained previous generation lags ~5 min on a
+    /// normal handoff and can be far more stale right after a long background, so
+    /// its absolute forecast times (`source + offset`) overlap the current
+    /// observed window. Sorting the combined list by `timestamp` would then
+    /// interleave those forecast boxes among the observed ones - the timeline
+    /// must always show observed first, then a single coherent forecast tail.
     var timelineFrames: [RadarImageData] {
-        let observed = images.filter { $0.kind.isObserved }
+        let observed = images
+            .filter { $0.kind.isObserved }
+            .sorted { $0.timestamp < $1.timestamp }
         guard let source = timelineForecastSource else { return observed }
-        let forecasts = images.filter {
-            $0.kind.isForecast && $0.sourceTimestamp.roundedToNearestRadarTime == source
-        }
+        let forecasts = images
+            .filter { $0.kind.isForecast && $0.sourceTimestamp.roundedToNearestRadarTime == source }
+            .sorted { ($0.kind.forecastOffsetMinutes ?? 0) < ($1.kind.forecastOffsetMinutes ?? 0) }
         return observed + forecasts
     }
 
-    /// The single forecast generation the timeline displays: the one we've loaded
-    /// (`displayedForecastSource`), or - before anything loads - the newest one
-    /// present. Always resolves to a source with a full set of offsets, so the box
-    /// count never changes as frames load.
+    /// The single forecast generation the timeline displays:
+    /// 1. what we've actually loaded (`displayedForecastSource`), else
+    /// 2. the newest generation we can still show - its source is at or before the
+    ///    newest loaded observed (so it isn't gated out of fetching) and it isn't
+    ///    fully failed. This deliberately SKIPS a newest generation whose observed
+    ///    never loaded (e.g. the newest mark 404'd past its publish delay): that
+    ///    forecast is gated forever, so picking it would only show permanent dead
+    ///    boxes instead of the forecast for the observed we actually have.
+    /// 3. before any observed loads (true cold start), the newest source present.
+    /// Always resolves to a source with a full set of offsets, so the box count
+    /// never changes as frames load.
     private var timelineForecastSource: Date? {
         if let displayed = displayedForecastSource {
             return displayed.roundedToNearestRadarTime
         }
-        return images
-            .filter { $0.kind.isForecast }
-            .map { $0.sourceTimestamp.roundedToNearestRadarTime }
-            .max()
+        let forecastSources = Set(
+            images.filter { $0.kind.isForecast }
+                .map { $0.sourceTimestamp.roundedToNearestRadarTime }
+        )
+        if let newestLoaded = newestSuccessfulObservedImage?.timestamp.roundedToNearestRadarTime {
+            let showable = forecastSources.filter {
+                $0 <= newestLoaded && forecastGenerationIsLive(source: $0)
+            }
+            if let best = showable.max() { return best }
+        }
+        return forecastSources.max()
+    }
+
+    /// A forecast generation is still worth showing while any of its frames has
+    /// loaded, is loading, or still holds retry budget. Once every frame has
+    /// permanently failed the generation is dead and must not win the timeline.
+    private func forecastGenerationIsLive(source: Date) -> Bool {
+        let frames = forecastImages(for: source)
+        guard !frames.isEmpty else { return false }
+        return frames.contains { $0.hasSucceeded || $0.isLoading || $0.shouldRetry }
     }
     
     var currentImage: UIImage? {
@@ -473,6 +507,20 @@ class RadarImageSequence: ObservableObject {
         if let anchor = newestSuccessfulObservedImage?.timestamp, shouldFallbackForecast(anchor: anchor) {
             ensureForecastPlaceholders(source: anchor.previousRadarTime, offsets: offsets, productID: productID)
         }
+
+        // Failed-newest re-anchor: if the newest mark didn't load (e.g. it 404'd
+        // past its publish delay) but an older observed did, seed the forecast for
+        // that newest LOADED observed right away - do NOT wait for the newest mark
+        // to burn its retry budget. The newest mark's own forecast is gated until
+        // it loads anyway, so leaving the user staring at disabled boxes for the
+        // whole ~50s retry window, when we already hold a real observed image and
+        // the server keeps older generations (~24h), is exactly the lag we avoid.
+        // If the newest mark later succeeds on retry, follow-newest promotes its
+        // generation over this one.
+        if let loaded = newestSuccessfulObservedImage?.timestamp,
+           loaded.roundedToNearestRadarTime != newestSource.roundedToNearestRadarTime {
+            ensureForecastPlaceholders(source: loaded, offsets: offsets, productID: productID)
+        }
     }
 
     /// Ensures forecast placeholders exist for the given source, creating any that
@@ -536,6 +584,27 @@ class RadarImageSequence: ObservableObject {
     func promoteRetryableToPending() {
         for image in images where image.hasFailed && image.shouldRetry {
             image.state = .pending
+            image.lastError = nil
+        }
+    }
+
+    /// Clears the retry budget of every failed frame still in the window,
+    /// returning them to `pending` so the next fetch pass attempts them again.
+    /// Triggered only by explicit "try again" moments - the publish boundary
+    /// (update timer), manual reload, and foreground - NEVER from the reconcile
+    /// loop itself, which would turn the bounded fast-retry into a tight no-delay
+    /// loop.
+    ///
+    /// Without this, a frame that 404'd only because the server hadn't generated
+    /// it yet (typical for the newest frame on a late-publishing product) exhausts
+    /// its ~50s fast-retry budget and is then abandoned: `framesPendingFetch`
+    /// skips non-pending frames and `promoteRetryableToPending` skips
+    /// budget-exhausted ones, so neither a passing publish cycle nor the reload
+    /// button revives it - only an app relaunch (which rebuilds the sequence).
+    func requeueFailedFrames() {
+        for image in images where image.hasFailed {
+            image.state = .pending
+            image.attemptCount = 0
             image.lastError = nil
         }
     }

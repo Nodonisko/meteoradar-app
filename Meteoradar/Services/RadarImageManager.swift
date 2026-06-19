@@ -89,11 +89,14 @@ class RadarImageManager: ObservableObject {
     }
 
     /// Manual reload: jump back to the newest frame and re-fetch anything missing.
-    /// Loaded frames are kept (served from cache), so there's no flash.
+    /// Loaded frames are kept (served from cache), so there's no flash. Failed
+    /// frames are requeued with a fresh budget - a reload is an explicit "try
+    /// again", so it must revive frames the bounded retry already gave up on.
     func refreshRadarImages() {
         stopAnimation()
         radarSequence.reset()
         cancelFetch()
+        radarSequence.requeueFailedFrames()
         reconcile()
     }
 
@@ -194,8 +197,13 @@ class RadarImageManager: ObservableObject {
 
         let delay = max(1, Date.utcNow.secondsUntilNextRadarUpdate(publishDelaySeconds: currentPublishDelaySeconds))
         let timer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
-            self?.reconcile()
-            self?.scheduleNextUpdateTimer()
+            guard let self else { return }
+            // A new image is expected now: revive any frame that 404'd earlier
+            // only because it hadn't been generated yet (e.g. the newest mark on
+            // a late-publishing product) so it gets a fresh attempt this cycle.
+            self.radarSequence.requeueFailedFrames()
+            self.reconcile()
+            self.scheduleNextUpdateTimer()
         }
         timer.tolerance = min(5, delay * 0.1)
         updateTimer = timer

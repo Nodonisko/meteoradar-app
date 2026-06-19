@@ -67,8 +67,12 @@ class NetworkService: NSObject, URLSessionDataDelegate {
     }
     private var activeRadarRequests: [ActiveRequestKey: AnyPublisher<RadarImageResult, Never>] = [:]
     // Underlying URLSession tasks so cancelAllRadarRequests can actually stop
-    // in-flight downloads (saves data when switching products)
-    private var activeRadarTasks: [ActiveRequestKey: URLSessionDataTask] = [:]
+    // in-flight downloads (saves data when switching products). Keyed by the
+    // session-unique `taskIdentifier` (not the request key) so a finishing task
+    // only ever removes its own entry - a reload can cancel a task and start a
+    // replacement for the same frame, and a same-key map would let the stale
+    // completion evict the live replacement, leaving it untracked/uncancellable.
+    private var activeRadarTasks: [Int: URLSessionDataTask] = [:]
     // Recursive: task registration happens inside the eagerly-executed Future body
     // while fetchRadarFrame still holds the lock
     private let requestLock = NSRecursiveLock()
@@ -79,6 +83,15 @@ class NetworkService: NSObject, URLSessionDataDelegate {
         // Configure URLSession for better performance and HTTP/3 support
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = Constants.Network.radarRequestTimeout
+
+        // Opt out of the URL loading system's HTTP cache entirely. We own success
+        // caching via FileSystemImageCache (checked before every request) and
+        // published radar frames are immutable, so URLCache adds nothing but risk:
+        // it can negatively-cache a 404 for a not-yet-generated frame and then keep
+        // serving that stale 404 to every retry, leaving the frame stuck in an
+        // error state until the app restarts.
+        config.urlCache = nil
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
         
         // Create session with self as delegate to enable HTTP/3 support
         self.session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
@@ -157,7 +170,7 @@ class NetworkService: NSObject, URLSessionDataDelegate {
         
         // Create radar-specific request
         let startTime = Date()
-        let request = createRadarRequest(for: url, requestKey: key, productID: productID, kind: kind, sourceTimestamp: sourceTimestamp, targetTimestamp: targetTimestamp, offsetMinutes: offsetMinutes, startTime: startTime)
+        let request = createRadarRequest(for: url, productID: productID, kind: kind, sourceTimestamp: sourceTimestamp, targetTimestamp: targetTimestamp, offsetMinutes: offsetMinutes, startTime: startTime)
             .handleEvents(
                 receiveCompletion: { [weak self] _ in
                     // Clean up when done
@@ -174,11 +187,11 @@ class NetworkService: NSObject, URLSessionDataDelegate {
     }
     
     /// Create the actual radar network request
-    private func createRadarRequest(for url: URL, requestKey: ActiveRequestKey, productID: String, kind: RadarFrameKind, sourceTimestamp: Date, targetTimestamp: Date, offsetMinutes: Int?, startTime: Date) -> AnyPublisher<RadarImageResult, Never> {
-        // Create URLRequest with HTTP/3 support
-        // Use appropriate cache policy based on cacheEnabled setting
-        let cachePolicy: URLRequest.CachePolicy = Constants.Radar.cacheEnabled ? .useProtocolCachePolicy : .reloadIgnoringLocalCacheData
-        var request = URLRequest(url: url, cachePolicy: cachePolicy, timeoutInterval: Constants.Network.radarRequestTimeout)
+    private func createRadarRequest(for url: URL, productID: String, kind: RadarFrameKind, sourceTimestamp: Date, targetTimestamp: Date, offsetMinutes: Int?, startTime: Date) -> AnyPublisher<RadarImageResult, Never> {
+        // Always hit the origin: success caching is handled by FileSystemImageCache
+        // before we get here, and bypassing URLCache prevents a stale/negatively
+        // cached 404 from being served to a retry (see session config).
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: Constants.Network.radarRequestTimeout)
         request.assumesHTTP3Capable = true
         
         // Create a Future publisher that gives us access to the URLSessionTask
@@ -188,15 +201,11 @@ class NetworkService: NSObject, URLSessionDataDelegate {
                 promise(.failure(NetworkError.invalidURL))
                 return
             }
-            
+
             let task = self.session.dataTask(with: request) { [weak self] data, response, error in
-                // Unregister the task once it finishes (or is cancelled)
-                if let self = self {
-                    self.requestLock.lock()
-                    self.activeRadarTasks.removeValue(forKey: requestKey)
-                    self.requestLock.unlock()
-                }
-                
+                // Cleanup happens in `didFinishCollecting` (it gets the task, so it
+                // removes its own entry by identifier) - not here, to avoid evicting
+                // a same-frame replacement task started by a concurrent reload.
                 if let error = error {
                     promise(.failure(error))
                 } else if let data = data, let response = response {
@@ -207,16 +216,15 @@ class NetworkService: NSObject, URLSessionDataDelegate {
                 }
             }
             
-            // Configure HTTP/3 priority and delivery preferences on the task
-            // Radar images must be fully downloaded before display (can't render partial PNG)
+            // Radar images must be fully downloaded before display (can't render a
+            // partial PNG); set HTTP/3 priority by frame type and recency.
             task.prefersIncrementalDelivery = false
-            
-            // Set priority based on frame type and recency
             task.priority = self.determinePriority(for: kind, targetTimestamp: targetTimestamp)
-            
-            // Register so cancelAllRadarRequests can cancel the download
+
+            // Register (under lock) so cancelAllRadarRequests can cancel the
+            // download. Keyed by the task's unique identifier.
             self.requestLock.lock()
-            self.activeRadarTasks[requestKey] = task
+            self.activeRadarTasks[task.taskIdentifier] = task
             self.requestLock.unlock()
             
             // Log network fetch start
@@ -380,9 +388,15 @@ class NetworkService: NSObject, URLSessionDataDelegate {
     }
     
     // MARK: - URLSessionDataDelegate
-    
-    /// Monitor network protocol usage (HTTP/1.1, HTTP/2, HTTP/3)
+
+    /// Deregister a finished task and monitor protocol usage. Fires for every task
+    /// (including cancelled ones), and removes only this task's own entry by its
+    /// identifier, so it never clobbers a same-frame replacement task.
     func urlSession(_ session: URLSession, task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
+        requestLock.lock()
+        activeRadarTasks.removeValue(forKey: task.taskIdentifier)
+        requestLock.unlock()
+
         let protocols = metrics.transactionMetrics.map { $0.networkProtocolName ?? "-" }
         logger.debug("Network protocols used: \(protocols.joined(separator: ", "), privacy: .public)")
     }

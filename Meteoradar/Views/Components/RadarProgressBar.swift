@@ -53,9 +53,14 @@ struct RadarProgressBar: View {
     // Uses `timelineFrames` (a single forecast generation) rather than raw
     // `images`, so retained previous-generation forecasts don't appear as extra,
     // non-selectable boxes during the handoff to a new forecast.
+    //
+    // `timelineFrames` is already in display order (observed oldest → newest,
+    // then forecast by offset). We must NOT re-sort by `timestamp` here: a stale
+    // retained forecast generation (e.g. right after a long background) has
+    // absolute times that overlap the observed window, which would interleave
+    // forecast boxes among the observed ones.
     private var stableImages: [(id: String, data: RadarImageData)] {
         radarSequence.timelineFrames
-            .sorted { $0.timestamp < $1.timestamp }
             .map { (id: $0.cacheKey, data: $0) }
     }
     

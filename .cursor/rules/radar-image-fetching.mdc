@@ -55,6 +55,19 @@ several minutes late, so a just-passed mark can 404 — handle errors gracefully
 - Cold-start fallback: if the newest generation's forecast isn't generated yet
   and nothing is on screen, also seed the previous generation (server keeps it)
   instead of showing red boxes; promote to newest once it arrives.
+- Failed-newest re-anchor: if the newest observed mark didn't load (404s past its
+  publish delay) but an older observed did, immediately seed the forecast for the
+  newest LOADED observed so it gets fetched. Do NOT wait for the newest mark to
+  burn its retry budget — its own forecast is gated until it loads anyway, so the
+  user would otherwise stare at disabled boxes for the whole ~50s retry window
+  even though we already hold a real observed image (and the server keeps older
+  generations ~24h). If the newest mark later succeeds on retry, follow-newest
+  promotes its generation over this one.
+- `timelineForecastSource` never picks a generation whose observed never loaded:
+  it chooses the loaded generation (`displayedForecastSource`), else the newest
+  generation that is both fetchable (source ≤ newest loaded observed) and not
+  fully failed, else (true cold start) the newest source present. This is what
+  keeps the failed-newest case from flashing the dead generation's boxes.
 - Anchored to the newest loaded observed; fetched close → far (+10 … +60 min).
 
 ## Selection (RadarImageSequence)
@@ -87,6 +100,14 @@ the new observed first, then its forecast generation loads.
 - Self-healing: the reconcile + retry loop runs until everything resolves.
   `handlePassCompletion` fails any frame left stranded in `loading`, so there is
   no "stuck grey box until manual reload".
+- Failed-frame revival: `requeueFailedFrames` clears the retry budget of in-window
+  failed frames (back to `pending`). Triggered only on explicit "try again"
+  moments - the publish boundary (`updateTimer`), manual reload, and foreground -
+  NEVER from `reconcile` (that would make the bounded fast-retry a tight loop).
+  Without it, a frame that 404'd before it was generated (newest mark on a
+  late-publishing product) burns its ~50s budget and is then skipped by both
+  `framesPendingFetch` and `promoteRetryableToPending`, so neither a passing
+  publish cycle nor the reload button can revive it - only an app relaunch.
 - `errorMessage` is only surfaced when nothing is displayable and no fetch/retry
   is still possible.
 
@@ -96,6 +117,12 @@ the new observed first, then its forecast generation loads.
   The count must never change dynamically as frames load — that's the point of
   placeholders.
 - Show a single coherent forecast generation, never two interleaved.
+- Order is structural — observed (oldest → newest) then the forecast tail (by
+  offset) — and `timelineFrames` already returns it that way. NEVER re-sort the
+  combined list by raw `timestamp` in the view: a retained previous generation
+  (5 min stale on a normal handoff, far more right after a long background) has
+  absolute forecast times (`source + offset`) that overlap the current observed
+  window, so a timestamp sort interleaves forecast boxes among the observed ones.
 
 ## Lifecycle
 
@@ -113,3 +140,7 @@ the new observed first, then its forecast generation loads.
 - File-system cache: 50 MB limit, 7-day expiration, served instantly on hit;
   undecodable entries are dropped and refetched. Cache the original bytes
   verbatim to preserve the embedded `GeoBox` PNG metadata.
+- No URLCache: the session opts out (`config.urlCache = nil`, requests use
+  `.reloadIgnoringLocalCacheData`). We own success caching (file cache, above)
+  and frames are immutable, so HTTP caching would only risk negatively-caching a
+  404 for a not-yet-generated frame and serving that stale 404 to retries.

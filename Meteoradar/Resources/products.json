@@ -7,7 +7,8 @@
       "south": 48.047275,
       "east": 19.623974,
       "north": 51.458369
-    }
+    },
+    "publishDelaySeconds": 10
   },
   {
     "id": "de",
@@ -17,7 +18,8 @@
       "south": 46.551379,
       "east": 16.168036,
       "north": 55.624271
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "pl",
@@ -38,7 +40,8 @@
       "south": 47.031193,
       "east": 23.634744,
       "north": 50.321029
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "at",
@@ -48,7 +51,8 @@
       "south": 45.658871,
       "east": 18.220469,
       "north": 49.728704
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "be",
@@ -58,7 +62,8 @@
       "south": 48.776326,
       "east": 7.497718,
       "north": 52.215314
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "ch",
@@ -68,7 +73,8 @@
       "south": 45.100918,
       "east": 11.514118,
       "north": 48.520097
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "dk",
@@ -78,7 +84,8 @@
       "south": 54.082861,
       "east": 12.261313,
       "north": 58.469516
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "ee",
@@ -88,7 +95,8 @@
       "south": 56.797783,
       "east": 29.59252,
       "north": 60.388974
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "fi",
@@ -98,7 +106,8 @@
       "south": 59.09306,
       "east": 33.143316,
       "north": 70.793045
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "fr",
@@ -108,7 +117,8 @@
       "south": 41.605182,
       "east": 9.292734,
       "north": 51.807256
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "gb",
@@ -118,7 +128,8 @@
       "south": 49.239511,
       "east": 2.949023,
       "north": 59.395834
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "gr",
@@ -128,7 +139,8 @@
       "south": 35.669837,
       "east": 27.593434,
       "north": 42.470556
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "hr",
@@ -138,7 +150,8 @@
       "south": 42.221883,
       "east": 20.4263,
       "north": 47.266748
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "hu",
@@ -148,7 +161,8 @@
       "south": 45.021469,
       "east": 23.948594,
       "north": 49.288577
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "ie",
@@ -158,7 +172,8 @@
       "south": 50.726517,
       "east": -4.803301,
       "north": 56.104912
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "is",
@@ -168,7 +183,8 @@
       "south": 62.679498,
       "east": -11.80186,
       "north": 67.254
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "it",
@@ -178,7 +194,8 @@
       "south": 37.197847,
       "east": 19.456396,
       "north": 47.805419
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "lv",
@@ -188,7 +205,8 @@
       "south": 54.94848,
       "east": 29.508835,
       "north": 58.793388
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "lt",
@@ -198,7 +216,8 @@
       "south": 53.16802,
       "east": 28.05962,
       "north": 57.160886
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "md",
@@ -208,7 +227,8 @@
       "south": 44.741855,
       "east": 31.172302,
       "north": 49.205247
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "mt",
@@ -218,7 +238,8 @@
       "south": 35.080185,
       "east": 15.452499,
       "north": 36.714591
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "nl",
@@ -228,7 +249,8 @@
       "south": 50.028691,
       "east": 8.395435,
       "north": 54.178726
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "no",
@@ -238,7 +260,8 @@
       "south": 57.260988,
       "east": 33.193923,
       "north": 71.845183
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "pt",
@@ -248,7 +271,8 @@
       "south": 36.265721,
       "east": -5.247149,
       "north": 42.873803
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "ro",
@@ -258,7 +282,8 @@
       "south": 42.930296,
       "east": 30.717722,
       "north": 48.993792
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "rs",
@@ -268,7 +293,8 @@
       "south": 41.515407,
       "east": 23.968314,
       "north": 46.89273
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "es",
@@ -278,7 +304,8 @@
       "south": 35.285097,
       "east": 4.289206,
       "north": 44.513467
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "se",
@@ -288,7 +315,8 @@
       "south": 54.623097,
       "east": 25.914358,
       "north": 69.754606
-    }
+    },
+    "publishDelaySeconds": 260
   },
   {
     "id": "si",
@@ -298,6 +326,7 @@
       "south": 44.704546,
       "east": 17.557504,
       "north": 47.58347
-    }
+    },
+    "publishDelaySeconds": 260
   }
 ]
