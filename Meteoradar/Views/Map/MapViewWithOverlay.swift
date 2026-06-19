@@ -77,6 +77,10 @@ struct MapViewWithOverlay: UIViewRepresentable {
         // Create ONE user location annotation that we'll reuse forever
         context.coordinator.setupUserLocationAnnotation(on: mapView)
 
+        // Place tappable country-switch flag markers (every product except the
+        // active one); tapping one switches the selected radar product.
+        context.coordinator.syncCountryAnnotations(on: mapView, selectedID: product.id)
+
         let longPressGesture = UILongPressGestureRecognizer(
             target: context.coordinator,
             action: #selector(Coordinator.handleMapLongPress(_:))
@@ -158,6 +162,7 @@ struct MapViewWithOverlay: UIViewRepresentable {
         private var lastRenderedTimestamp: Date?
         private var lastRenderedImageID: ObjectIdentifier?
         private var customMarkerAnnotations: [UUID: CustomMapMarkerAnnotation] = [:]
+        private var countryAnnotations: [String: CountrySwitchAnnotation] = [:]
         
         init(_ parent: MapViewWithOverlay) {
             self.parent = parent
@@ -187,8 +192,15 @@ struct MapViewWithOverlay: UIViewRepresentable {
                 .dropFirst()
                 .removeDuplicates()
                 .sink { [weak self] productID in
-                    guard let product = RadarProductService.shared.product(withID: productID) else { return }
-                    self?.applyBounds(product.bounds, recenterTo: product.region)
+                    guard let self, let product = RadarProductService.shared.product(withID: productID) else { return }
+                    self.applyBounds(product.bounds, recenterTo: product.region)
+                    // Re-sync flag markers so the now-active country hides and the
+                    // previously active one reappears. Use `productID` (the new
+                    // value) — see syncCountryAnnotations for why SettingsService
+                    // can't be re-read here.
+                    if let mapView = self.mapView {
+                        self.syncCountryAnnotations(on: mapView, selectedID: productID)
+                    }
                 }
                 .store(in: &settingsCancellables)
         }
@@ -324,11 +336,48 @@ struct MapViewWithOverlay: UIViewRepresentable {
             }
         }
 
+        /// Adds a tappable circular flag marker for every product except the
+        /// active one, and removes the marker for `selectedID`. Idempotent:
+        /// reuses existing annotations so repeated calls (launch + each product
+        /// switch) don't churn the map.
+        ///
+        /// `selectedID` is passed in rather than read from `SettingsService`
+        /// because `@Published` emits in `willSet`: inside the product-change
+        /// subscription the stored value is still the *previous* product, so
+        /// re-reading it here would leave the now-active country's flag on screen.
+        func syncCountryAnnotations(on mapView: MKMapView, selectedID: String) {
+            let products = RadarProductService.shared.products
+            let switchFormat = String(localized: "map.switch_country")
+
+            let desiredIDs = Set(products.map { $0.id }).subtracting([selectedID])
+
+            for (id, annotation) in countryAnnotations where !desiredIDs.contains(id) {
+                mapView.removeAnnotation(annotation)
+                countryAnnotations[id] = nil
+            }
+
+            for product in products where desiredIDs.contains(product.id) && countryAnnotations[product.id] == nil {
+                let annotation = CountrySwitchAnnotation(
+                    productID: product.id,
+                    flag: product.flagEmoji,
+                    accessibilityText: String(format: switchFormat, product.pickerTitle),
+                    coordinate: product.center
+                )
+                countryAnnotations[product.id] = annotation
+                mapView.addAnnotation(annotation)
+            }
+        }
+
         @objc func handleMapLongPress(_ gesture: UILongPressGestureRecognizer) {
             guard gesture.state == .began, let mapView = mapView else { return }
             let point = gesture.location(in: mapView)
 
             if customMarkerID(at: point, on: mapView) != nil {
+                return
+            }
+
+            // Don't drop a pin when long-pressing on top of a country flag marker.
+            if isCountryMarker(at: point, on: mapView) {
                 return
             }
 
@@ -364,6 +413,18 @@ struct MapViewWithOverlay: UIViewRepresentable {
                 }
             }
             return nearest?.id
+        }
+
+        private func isCountryMarker(at point: CGPoint, on mapView: MKMapView) -> Bool {
+            var touchedView: UIView? = mapView.hitTest(point, with: nil)
+            while let currentView = touchedView {
+                if let annotationView = currentView as? MKAnnotationView,
+                   annotationView.annotation is CountrySwitchAnnotation {
+                    return true
+                }
+                touchedView = currentView.superview
+            }
+            return false
         }
         
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
@@ -405,6 +466,24 @@ struct MapViewWithOverlay: UIViewRepresentable {
                 return annotationView
             }
 
+            if let countryAnnotation = annotation as? CountrySwitchAnnotation {
+                let identifier = "CountrySwitchFlag"
+                let annotationView: CountrySwitchAnnotationView
+                if let dequeued = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? CountrySwitchAnnotationView {
+                    annotationView = dequeued
+                    annotationView.annotation = countryAnnotation
+                } else {
+                    annotationView = CountrySwitchAnnotationView(annotation: countryAnnotation, reuseIdentifier: identifier)
+                }
+
+                annotationView.update(flag: countryAnnotation.flag)
+                // Let MapKit declutter overlapping flags when zoomed out; the user
+                // location / radar stay required-priority above these.
+                annotationView.displayPriority = .defaultLow
+                annotationView.accessibilityLabel = countryAnnotation.accessibilityText
+                return annotationView
+            }
+
             if let customAnnotation = annotation as? CustomMapMarkerAnnotation {
                 let identifier = "CustomMarkerDot"
                 let annotationView: CustomMarkerDotAnnotationView
@@ -425,6 +504,15 @@ struct MapViewWithOverlay: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
+            if let countryAnnotation = view.annotation as? CountrySwitchAnnotation {
+                mapView.deselectAnnotation(countryAnnotation, animated: false)
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                // Drives the product-change subscription, which recenters the map,
+                // rebuilds the overlays, and re-syncs the flag markers.
+                SettingsService.shared.selectedRadarProductID = countryAnnotation.productID
+                return
+            }
+
             guard let customAnnotation = view.annotation as? CustomMapMarkerAnnotation else { return }
             parent.onCustomMarkerTap(customAnnotation.markerID)
             mapView.deselectAnnotation(customAnnotation, animated: false)
@@ -517,6 +605,82 @@ private final class CustomMarkerDotAnnotationView: MKAnnotationView {
             glyphImageView.image = glyph.prefix(2).textImage(size: bounds.insetBy(dx: glyphInset, dy: glyphInset).size)
         } else {
             glyphImageView.image = nil
+        }
+    }
+}
+
+private final class CountrySwitchAnnotation: NSObject, MKAnnotation {
+    let productID: String
+    let flag: String
+    let accessibilityText: String
+    let coordinate: CLLocationCoordinate2D
+
+    init(productID: String, flag: String, accessibilityText: String, coordinate: CLLocationCoordinate2D) {
+        self.productID = productID
+        self.flag = flag
+        self.accessibilityText = accessibilityText
+        self.coordinate = coordinate
+        super.init()
+    }
+}
+
+/// A circular flag badge used to switch to another country's radar by tapping.
+/// The flag emoji is aspect-filled into a circle with a thin white ring so it
+/// reads as a country "coin" rather than the raw rectangular emoji.
+private final class CountrySwitchAnnotationView: MKAnnotationView {
+    private static let diameter: CGFloat = 36
+
+    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
+        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
+        let size = Self.diameter
+        frame = CGRect(x: 0, y: 0, width: size, height: size)
+        centerOffset = .zero
+        canShowCallout = false
+
+        layer.shadowColor = UIColor.black.cgColor
+        layer.shadowOpacity = 0.3
+        layer.shadowRadius = 2
+        layer.shadowOffset = CGSize(width: 0, height: 1)
+    }
+
+    required init?(coder aDecoder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func update(flag: String) {
+        image = Self.circularFlagImage(flag: flag, diameter: Self.diameter)
+    }
+
+    private static func circularFlagImage(flag: String, diameter: CGFloat) -> UIImage {
+        let attributes: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 80)]
+        let emoji = NSAttributedString(string: flag, attributes: attributes)
+        let emojiSize = emoji.size()
+        guard emojiSize.width > 0, emojiSize.height > 0 else { return UIImage() }
+
+        let emojiImage = UIGraphicsImageRenderer(size: emojiSize).image { _ in
+            emoji.draw(at: .zero)
+        }
+
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: diameter, height: diameter))
+        return renderer.image { _ in
+            let rect = CGRect(x: 0, y: 0, width: diameter, height: diameter)
+            let border = diameter * 0.08
+            let clip = UIBezierPath(ovalIn: rect)
+            clip.addClip()
+
+            UIColor.systemGray5.setFill()
+            clip.fill()
+
+            // Aspect-fill so the flag covers the whole circle, then center it.
+            let scale = max(diameter / emojiSize.width, diameter / emojiSize.height)
+            let drawSize = CGSize(width: emojiSize.width * scale, height: emojiSize.height * scale)
+            let origin = CGPoint(x: (diameter - drawSize.width) / 2, y: (diameter - drawSize.height) / 2)
+            emojiImage.draw(in: CGRect(origin: origin, size: drawSize))
+
+            UIColor.white.setStroke()
+            let ring = UIBezierPath(ovalIn: rect.insetBy(dx: border / 2, dy: border / 2))
+            ring.lineWidth = border
+            ring.stroke()
         }
     }
 }

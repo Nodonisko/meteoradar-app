@@ -346,6 +346,23 @@
         }
       }
     },
+    "map.switch_country" : {
+      "comment" : "Accessibility label for a tappable flag marker on the map that switches the radar to another country. The argument is the localized country name.",
+      "localizations" : {
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Přepnout na %@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Switch to %@"
+          }
+        }
+      }
+    },
     "Marker" : {
       "extractionState" : "stale",
       "localizations" : {

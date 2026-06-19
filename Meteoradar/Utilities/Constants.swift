@@ -74,8 +74,8 @@ struct Constants {
         
         // Cache configuration
         static let cacheEnabled = true // Enable file system caching
-        static let maxCacheSize: Int64 = 50 * 1024 * 1024 // 50MB cache limit
-        static let cacheExpirationDays = 7 // Remove cached images older than 7 days
+        static let maxCacheSize: Int64 = 100 * 1024 * 1024 // 100MB cache limit
+        static let cacheExpirationDays = 3 // Remove cached images older than 7 days
         
         // Default map region for the currently selected radar product.
         // Only read for the initial map setup (steady state), never during a product switch.

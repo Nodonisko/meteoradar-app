@@ -2,6 +2,7 @@
   {
     "id": "cz",
     "label": "Czechia radar",
+    "center": { "latitude": 49.8, "longitude": 15.47 },
     "bounds": {
       "west": 11.266869,
       "south": 48.047275,
@@ -13,6 +14,7 @@
   {
     "id": "de",
     "label": "Germany radar",
+    "center": { "latitude": 51.16, "longitude": 10.45 },
     "bounds": {
       "west": 4.711586,
       "south": 46.551379,
@@ -24,6 +26,7 @@
   {
     "id": "pl",
     "label": "Poland radar",
+    "center": { "latitude": 52.0, "longitude": 19.4 },
     "publishDelaySeconds": 260,
     "bounds": {
       "west": 12.936388,
@@ -35,6 +38,7 @@
   {
     "id": "sk",
     "label": "Slovakia radar",
+    "center": { "latitude": 48.7, "longitude": 19.7 },
     "bounds": {
       "west": 15.764866,
       "south": 47.031193,
@@ -46,6 +50,7 @@
   {
     "id": "at",
     "label": "Austria radar",
+    "center": { "latitude": 47.6, "longitude": 14.1 },
     "bounds": {
       "west": 8.463484,
       "south": 45.658871,
@@ -57,6 +62,7 @@
   {
     "id": "be",
     "label": "Belgium radar",
+    "center": { "latitude": 50.64, "longitude": 4.66 },
     "bounds": {
       "west": 1.380375,
       "south": 48.776326,
@@ -68,6 +74,7 @@
   {
     "id": "ch",
     "label": "Switzerland radar",
+    "center": { "latitude": 46.8, "longitude": 8.23 },
     "bounds": {
       "west": 4.91813,
       "south": 45.100918,
@@ -79,6 +86,7 @@
   {
     "id": "dk",
     "label": "Denmark radar",
+    "center": { "latitude": 56.0, "longitude": 9.5 },
     "bounds": {
       "west": 6.819675,
       "south": 54.082861,
@@ -90,6 +98,7 @@
   {
     "id": "ee",
     "label": "Estonia radar",
+    "center": { "latitude": 58.6, "longitude": 25.0 },
     "bounds": {
       "west": 22.015533,
       "south": 56.797783,
@@ -101,6 +110,7 @@
   {
     "id": "fi",
     "label": "Finland radar",
+    "center": { "latitude": 63.0, "longitude": 26.0 },
     "bounds": {
       "west": 18.621891,
       "south": 59.09306,
@@ -112,6 +122,7 @@
   {
     "id": "fr",
     "label": "France radar",
+    "center": { "latitude": 46.6, "longitude": 2.5 },
     "bounds": {
       "west": -5.865889,
       "south": 41.605182,
@@ -123,6 +134,7 @@
   {
     "id": "gb",
     "label": "United Kingdom radar",
+    "center": { "latitude": 53.5, "longitude": -2.5 },
     "bounds": {
       "west": -7.543125,
       "south": 49.239511,
@@ -134,6 +146,7 @@
   {
     "id": "gr",
     "label": "Greece radar",
+    "center": { "latitude": 39.5, "longitude": 22.0 },
     "bounds": {
       "west": 19.067082,
       "south": 35.669837,
@@ -145,6 +158,7 @@
   {
     "id": "hr",
     "label": "Croatia radar",
+    "center": { "latitude": 45.1, "longitude": 15.5 },
     "bounds": {
       "west": 12.479137,
       "south": 42.221883,
@@ -156,6 +170,7 @@
   {
     "id": "hu",
     "label": "Hungary radar",
+    "center": { "latitude": 47.16, "longitude": 19.5 },
     "bounds": {
       "west": 15.045243,
       "south": 45.021469,
@@ -167,6 +182,7 @@
   {
     "id": "ie",
     "label": "Ireland radar",
+    "center": { "latitude": 53.2, "longitude": -8.0 },
     "bounds": {
       "west": -11.647136,
       "south": 50.726517,
@@ -178,6 +194,7 @@
   {
     "id": "is",
     "label": "Iceland radar",
+    "center": { "latitude": 64.9, "longitude": -18.6 },
     "bounds": {
       "west": -26.267531,
       "south": 62.679498,
@@ -189,6 +206,7 @@
   {
     "id": "it",
     "label": "Italy radar",
+    "center": { "latitude": 42.8, "longitude": 12.8 },
     "bounds": {
       "west": 5.585726,
       "south": 37.197847,
@@ -200,6 +218,7 @@
   {
     "id": "lv",
     "label": "Latvia radar",
+    "center": { "latitude": 56.9, "longitude": 25.0 },
     "bounds": {
       "west": 19.674605,
       "south": 54.94848,
@@ -211,6 +230,7 @@
   {
     "id": "lt",
     "label": "Lithuania radar",
+    "center": { "latitude": 55.2, "longitude": 23.9 },
     "bounds": {
       "west": 19.765159,
       "south": 53.16802,
@@ -222,6 +242,7 @@
   {
     "id": "md",
     "label": "Moldova radar",
+    "center": { "latitude": 47.2, "longitude": 28.5 },
     "bounds": {
       "west": 25.541452,
       "south": 44.741855,
@@ -233,6 +254,7 @@
   {
     "id": "mt",
     "label": "Malta radar",
+    "center": { "latitude": 35.9, "longitude": 14.4 },
     "bounds": {
       "west": 13.435455,
       "south": 35.080185,
@@ -244,6 +266,7 @@
   {
     "id": "nl",
     "label": "Netherlands radar",
+    "center": { "latitude": 52.2, "longitude": 5.5 },
     "bounds": {
       "west": 2.294029,
       "south": 50.028691,
@@ -255,6 +278,7 @@
   {
     "id": "no",
     "label": "Norway radar",
+    "center": { "latitude": 61.5, "longitude": 9.0 },
     "bounds": {
       "west": 3.447983,
       "south": 57.260988,
@@ -266,6 +290,7 @@
   {
     "id": "pt",
     "label": "Portugal radar",
+    "center": { "latitude": 39.6, "longitude": -8.0 },
     "bounds": {
       "west": -10.418533,
       "south": 36.265721,
@@ -277,6 +302,7 @@
   {
     "id": "ro",
     "label": "Romania radar",
+    "center": { "latitude": 45.9, "longitude": 25.0 },
     "bounds": {
       "west": 19.207807,
       "south": 42.930296,
@@ -288,6 +314,7 @@
   {
     "id": "rs",
     "label": "Serbia radar",
+    "center": { "latitude": 44.0, "longitude": 20.9 },
     "bounds": {
       "west": 17.815915,
       "south": 41.515407,
@@ -299,6 +326,7 @@
   {
     "id": "es",
     "label": "Spain radar",
+    "center": { "latitude": 40.2, "longitude": -3.7 },
     "bounds": {
       "west": -10.272448,
       "south": 35.285097,
@@ -310,6 +338,7 @@
   {
     "id": "se",
     "label": "Sweden radar",
+    "center": { "latitude": 62.0, "longitude": 15.0 },
     "bounds": {
       "west": 9.718319,
       "south": 54.623097,
@@ -321,6 +350,7 @@
   {
     "id": "si",
     "label": "Slovenia radar",
+    "center": { "latitude": 46.1, "longitude": 14.8 },
     "bounds": {
       "west": 12.326989,
       "south": 44.704546,
