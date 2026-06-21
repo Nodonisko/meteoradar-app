@@ -139,13 +139,13 @@
         "cs" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "- Přidáno tlačítko pro vycentrování mapy na vaši polohu\n"
+            "value" : "- Pokud vyrážíte na dovolenou do zahraničí, můžete si Meteoradar vzít s sebou. **Podporuje nyní až 29 zemí v Evropě.**\n- Přidáno tlačítko přesunutí na vaši současnou polohu\n- Nový ještě rychlejší server, díky kterému se snímky pro ČR objeví již pár vteřin po pořízení ČHMÚ"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "- Added a button to center the map on your location\n"
+            "value" : "- If you are heading abroad for vacation, you can take Meteoradar with you. It now supports up to 29 countries in Europe.\n- Added a button to move to your current location\n- A new, even faster server makes Czech radar images appear just a few seconds after CHMI captures them"
           }
         }
       }
@@ -155,13 +155,13 @@
         "cs" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Co je nového"
+            "value" : "Velká letní aktualizace"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "What's New"
+            "value" : "Big Summer Update"
           }
         }
       }
@@ -953,40 +953,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "🇬🇧 United Kingdom"
-          }
-        }
-      }
-    },
-    "product.gr.picker_button_title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "cs" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "🇬🇷"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "🇬🇷"
-          }
-        }
-      }
-    },
-    "product.gr.picker_title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "cs" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "🇬🇷 Řecko"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "🇬🇷 Greece"
           }
         }
       }

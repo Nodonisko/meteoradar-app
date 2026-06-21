@@ -18,10 +18,14 @@ struct RadarProduct: Decodable, Identifiable, Equatable {
     /// is available. The displayed overlay positions itself from image metadata.
     let bounds: GeoBounds
 
-    /// Map coordinate where this product's country-switch marker is anchored.
+    /// Map coordinate where this product's country-switch flag marker is anchored.
     /// Tuned in products.json to sit near where Apple Maps draws the country
     /// label, independent of `bounds.center` (which can fall over sea).
-    let center: CLLocationCoordinate2D
+    ///
+    /// Optional: omit `center` in products.json to keep a product out of the
+    /// on-map country switcher (no flag marker) while still listing it in the
+    /// picker menu.
+    let center: CLLocationCoordinate2D?
 
     /// Soft lower bound (seconds after the 5-minute mark) before this product's
     /// image can realistically exist on the server. It only suppresses the
@@ -43,8 +47,11 @@ struct RadarProduct: Decodable, Identifiable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         bounds = try container.decode(GeoBounds.self, forKey: .bounds)
-        let center = try container.decode(Coordinate.self, forKey: .center)
-        self.center = CLLocationCoordinate2D(latitude: center.latitude, longitude: center.longitude)
+        if let coordinate = try container.decodeIfPresent(Coordinate.self, forKey: .center) {
+            self.center = CLLocationCoordinate2D(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        } else {
+            self.center = nil
+        }
         publishDelaySeconds = try container.decodeIfPresent(Int.self, forKey: .publishDelaySeconds)
             ?? RadarSharedConstants.serverLatencyOffsetSeconds
     }
@@ -65,8 +72,8 @@ struct RadarProduct: Decodable, Identifiable, Equatable {
     static func == (lhs: RadarProduct, rhs: RadarProduct) -> Bool {
         lhs.id == rhs.id
             && lhs.bounds == rhs.bounds
-            && lhs.center.latitude == rhs.center.latitude
-            && lhs.center.longitude == rhs.center.longitude
+            && lhs.center?.latitude == rhs.center?.latitude
+            && lhs.center?.longitude == rhs.center?.longitude
             && lhs.publishDelaySeconds == rhs.publishDelaySeconds
     }
 

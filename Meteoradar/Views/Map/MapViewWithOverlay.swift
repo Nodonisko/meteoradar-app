@@ -348,6 +348,9 @@ struct MapViewWithOverlay: UIViewRepresentable {
         /// reuses existing annotations so repeated calls (launch + each product
         /// switch) don't churn the map.
         ///
+        /// Products without a configured `center` get no marker (they stay
+        /// reachable through the picker menu only).
+        ///
         /// `selectedID` is passed in rather than read from `SettingsService`
         /// because `@Published` emits in `willSet`: inside the product-change
         /// subscription the stored value is still the *previous* product, so
@@ -356,7 +359,9 @@ struct MapViewWithOverlay: UIViewRepresentable {
             let products = RadarProductService.shared.products
             let switchFormat = String(localized: "map.switch_country")
 
-            let desiredIDs = Set(products.map { $0.id }).subtracting([selectedID])
+            // Only products that both aren't the active one and have a map anchor.
+            let desiredIDs = Set(products.filter { $0.center != nil }.map { $0.id })
+                .subtracting([selectedID])
 
             for (id, annotation) in countryAnnotations where !desiredIDs.contains(id) {
                 mapView.removeAnnotation(annotation)
@@ -364,11 +369,12 @@ struct MapViewWithOverlay: UIViewRepresentable {
             }
 
             for product in products where desiredIDs.contains(product.id) && countryAnnotations[product.id] == nil {
+                guard let center = product.center else { continue }
                 let annotation = CountrySwitchAnnotation(
                     productID: product.id,
                     flag: product.flagEmoji,
                     accessibilityText: String(format: switchFormat, product.pickerTitle),
-                    coordinate: product.center
+                    coordinate: center
                 )
                 countryAnnotations[product.id] = annotation
                 mapView.addAnnotation(annotation)
@@ -484,9 +490,9 @@ struct MapViewWithOverlay: UIViewRepresentable {
                 }
 
                 annotationView.update(flag: countryAnnotation.flag)
-                // Let MapKit declutter overlapping flags when zoomed out; the user
-                // location / radar stay required-priority above these.
-                annotationView.displayPriority = .defaultLow
+                // Keep country switchers above map labels and other optional map content.
+                annotationView.displayPriority = .required
+                //annotationView.zPriority = .max
                 annotationView.accessibilityLabel = countryAnnotation.accessibilityText
                 return annotationView
             }
@@ -635,7 +641,8 @@ private final class CountrySwitchAnnotation: NSObject, MKAnnotation {
 /// The flag emoji is aspect-filled into a circle with a thin white ring so it
 /// reads as a country "coin" rather than the raw rectangular emoji.
 private final class CountrySwitchAnnotationView: MKAnnotationView {
-    private static let diameter: CGFloat = 36
+    /// Keep the full size on iPad; shrink by 1/3 on iPhone where screen space is tighter.
+    private static let diameter: CGFloat = UIDevice.current.userInterfaceIdiom == .pad ? 36 : 24
 
     override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)

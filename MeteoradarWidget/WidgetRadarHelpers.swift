@@ -89,6 +89,7 @@ enum WidgetRadarImageLoader {
             let filename = url.lastPathComponent
             guard filename.lowercased().hasSuffix(".png") else { return nil }
             guard !isForecastFilename(filename) else { return nil }
+            guard isDefaultProductFilename(filename) else { return nil }
             guard let timestamp = RadarCacheHelpers.timestamp(from: filename) else { return nil }
             return (url: url, timestamp: timestamp, isHighQuality: isHighQualityFilename(filename))
         }
@@ -143,6 +144,10 @@ enum WidgetRadarImageLoader {
 
     private static func isForecastFilename(_ filename: String) -> Bool {
         filename.contains("_forecast_")
+    }
+
+    private static func isDefaultProductFilename(_ filename: String) -> Bool {
+        filename.hasPrefix("radar_\(RadarSharedConstants.defaultProductID)_")
     }
 
     private static func isHighQualityFilename(_ filename: String) -> Bool {
