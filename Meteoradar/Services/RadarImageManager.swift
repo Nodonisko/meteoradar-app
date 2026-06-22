@@ -53,6 +53,15 @@ class RadarImageManager: ObservableObject {
     /// explicitly through the whole pipeline.
     private var currentProductID: String
 
+    /// The image quality this manager is operating on. Like `currentProductID`,
+    /// it's adopted from the quality-change event payload and threaded explicitly
+    /// rather than read from the global mid-switch: `@Published` emits in `willSet`,
+    /// so `SettingsService.shared.imageQuality` still reads the PREVIOUS value while
+    /// the change subscription runs. The newest-observed request is built
+    /// synchronously inside that subscription, so reading the global there fetched
+    /// the old quality for that one frame.
+    private var currentImageQuality: Constants.ImageQuality
+
     /// Publish delay for the current product, used as a soft lower bound so we
     /// don't ping the server before its image can exist.
     private var currentPublishDelaySeconds: Int {
@@ -62,6 +71,7 @@ class RadarImageManager: ObservableObject {
 
     init() {
         currentProductID = RadarProductService.shared.selectedProduct.id
+        currentImageQuality = SettingsService.shared.imageQuality
         setupPublishedForwarding()
         setupSettingsObserver()
         reconcile()
@@ -159,13 +169,18 @@ class RadarImageManager: ObservableObject {
             .store(in: &cancellables)
 
         // Image-quality change: the URL (and thus disk-cache filename) differs per
-        // quality, so existing placeholders are stale. Rebuild from scratch.
+        // quality, so existing placeholders are stale. Rebuild from scratch. We
+        // adopt the quality from the publisher payload, not the global, because
+        // @Published emits during willSet when the stored value still reflects the
+        // previous quality - and the newest-observed request is built synchronously
+        // in this subscription, so reading the global would fetch the old quality.
         settingsService.$imageQuality
             .dropFirst()
             .removeDuplicates()
-            .sink { [weak self] _ in
+            .sink { [weak self] newQuality in
                 guard let self else { return }
                 self.logger.info("Image quality changed, reloading")
+                self.currentImageQuality = newQuality
                 self.stopAnimation()
                 self.cancelFetch()
                 self.radarSequence.removeAllImages()
@@ -222,10 +237,11 @@ class RadarImageManager: ObservableObject {
             intervalMinutes: interval,
             publishDelaySeconds: currentPublishDelaySeconds
         )
-        radarSequence.syncObservedPlaceholders(for: observedTimestamps, productID: currentProductID)
+        radarSequence.syncObservedPlaceholders(for: observedTimestamps, quality: currentImageQuality, productID: currentProductID)
         radarSequence.syncForecastPlaceholders(
             newestSource: observedTimestamps.first,
             offsets: Constants.Radar.forecastOffsets(),
+            quality: currentImageQuality,
             productID: currentProductID
         )
 
@@ -264,7 +280,7 @@ class RadarImageManager: ObservableObject {
         // `fetchFrames` delivers on the main queue, so `onStart`/results stay on
         // main and an all-cached pass completes asynchronously - after this
         // assignment - which is what keeps repeated `reconcile()` calls re-entrant-safe.
-        fetchCancellable = networkService.fetchFrames(specs, productID: currentProductID, onStart: markStarted)
+        fetchCancellable = networkService.fetchFrames(specs, quality: currentImageQuality, productID: currentProductID, onStart: markStarted)
             .sink(
                 receiveCompletion: { [weak self] _ in self?.handlePassCompletion() },
                 receiveValue: { [weak self] result in self?.apply(result) }

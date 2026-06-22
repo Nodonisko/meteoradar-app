@@ -100,17 +100,17 @@ class NetworkService: NSObject, URLSessionDataDelegate {
     // MARK: - Radar-Specific API
     
     /// Fetch radar image for specific timestamp with deduplication and error handling
-    func fetchRadarImage(for timestamp: Date, productID: String) -> AnyPublisher<RadarImageResult, Never> {
-        return fetchRadarFrame(kind: .observed, sourceTimestamp: timestamp, targetTimestamp: timestamp, offsetMinutes: nil, productID: productID)
+    func fetchRadarImage(for timestamp: Date, quality: Constants.ImageQuality, productID: String) -> AnyPublisher<RadarImageResult, Never> {
+        return fetchRadarFrame(kind: .observed, sourceTimestamp: timestamp, targetTimestamp: timestamp, offsetMinutes: nil, quality: quality, productID: productID)
     }
     
-    func fetchForecastImage(sourceTimestamp: Date, offsetMinutes: Int, productID: String) -> AnyPublisher<RadarImageResult, Never> {
+    func fetchForecastImage(sourceTimestamp: Date, offsetMinutes: Int, quality: Constants.ImageQuality, productID: String) -> AnyPublisher<RadarImageResult, Never> {
         let targetTimestamp = sourceTimestamp.addingTimeInterval(TimeInterval(offsetMinutes * 60))
         let kind = RadarFrameKind.forecast(offsetMinutes: offsetMinutes)
-        return fetchRadarFrame(kind: kind, sourceTimestamp: sourceTimestamp, targetTimestamp: targetTimestamp, offsetMinutes: offsetMinutes, productID: productID)
+        return fetchRadarFrame(kind: kind, sourceTimestamp: sourceTimestamp, targetTimestamp: targetTimestamp, offsetMinutes: offsetMinutes, quality: quality, productID: productID)
     }
     
-    private func fetchRadarFrame(kind: RadarFrameKind, sourceTimestamp: Date, targetTimestamp: Date, offsetMinutes: Int?, productID: String) -> AnyPublisher<RadarImageResult, Never> {
+    private func fetchRadarFrame(kind: RadarFrameKind, sourceTimestamp: Date, targetTimestamp: Date, offsetMinutes: Int?, quality: Constants.ImageQuality, productID: String) -> AnyPublisher<RadarImageResult, Never> {
         requestLock.lock()
         defer { requestLock.unlock() }
         
@@ -120,8 +120,10 @@ class NetworkService: NSObject, URLSessionDataDelegate {
             return existingRequest
         }
         
-        // Generate URL for timestamp with quality setting
-        let quality = SettingsService.shared.imageQuality
+        // Build the URL with the quality threaded in by the caller. We never read
+        // SettingsService.shared.imageQuality here: @Published emits in willSet, so
+        // a request built synchronously during a quality-change would still see the
+        // PREVIOUS quality (the cause of the stale newest-frame bug).
         let urlString: String
         switch kind {
         case .observed:
@@ -325,6 +327,7 @@ class NetworkService: NSObject, URLSessionDataDelegate {
     /// so the caller's subscription is fully assigned before it sees completion.
     func fetchFrames(
         _ frames: [RadarFrameSpec],
+        quality: Constants.ImageQuality,
         productID: String,
         onStart: ((RadarFrameSpec) -> Void)? = nil
     ) -> AnyPublisher<RadarImageResult, Never> {
@@ -334,9 +337,9 @@ class NetworkService: NSObject, URLSessionDataDelegate {
                 let request: AnyPublisher<RadarImageResult, Never>
                 switch frame.kind {
                 case .observed:
-                    request = self.fetchRadarImage(for: frame.sourceTimestamp, productID: productID)
+                    request = self.fetchRadarImage(for: frame.sourceTimestamp, quality: quality, productID: productID)
                 case .forecast(let offset):
-                    request = self.fetchForecastImage(sourceTimestamp: frame.sourceTimestamp, offsetMinutes: offset, productID: productID)
+                    request = self.fetchForecastImage(sourceTimestamp: frame.sourceTimestamp, offsetMinutes: offset, quality: quality, productID: productID)
                 }
                 return request
                     .receive(on: DispatchQueue.main)

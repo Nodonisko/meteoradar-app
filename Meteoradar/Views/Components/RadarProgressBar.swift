@@ -342,7 +342,7 @@ struct ErrorToastView: View {
     
     // Add some sample images to show the progress bar
     let sampleTimestamps = Date.radarTimestamps(count: 12)
-    sequence.syncObservedPlaceholders(for: sampleTimestamps, productID: SettingsService.defaultRadarProductID)
+    sequence.syncObservedPlaceholders(for: sampleTimestamps, quality: SettingsService.shared.imageQuality, productID: SettingsService.defaultRadarProductID)
     
     // Set up different loading states for preview
     if sequence.images.count >= 8 {

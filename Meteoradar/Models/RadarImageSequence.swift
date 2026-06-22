@@ -433,7 +433,7 @@ class RadarImageSequence: ObservableObject {
     /// Idempotent: if nothing structurally changed the `images` array is left
     /// untouched, so this can be called on every reconcile without churning the UI
     /// or resetting in-flight retry state.
-    func syncObservedPlaceholders(for timestamps: [Date], productID: String) {
+    func syncObservedPlaceholders(for timestamps: [Date], quality: Constants.ImageQuality, productID: String) {
         var rebuilt: [RadarImageData] = []
 
         for timestamp in timestamps {
@@ -441,7 +441,7 @@ class RadarImageSequence: ObservableObject {
             if let existing = images.first(where: { $0.frameID == targetID }) {
                 rebuilt.append(existing)
             } else {
-                let urlString = Constants.Radar.observedURL(for: timestamp, quality: SettingsService.shared.imageQuality, productID: productID)
+                let urlString = Constants.Radar.observedURL(for: timestamp, quality: quality, productID: productID)
                 rebuilt.append(RadarImageData(
                     timestamp: timestamp,
                     urlString: urlString,
@@ -476,9 +476,9 @@ class RadarImageSequence: ObservableObject {
     }
     
     /// Creates a single forecast placeholder for a given source + offset.
-    private func makeForecastPlaceholder(source: Date, offset: Int, productID: String) -> RadarImageData {
+    private func makeForecastPlaceholder(source: Date, offset: Int, quality: Constants.ImageQuality, productID: String) -> RadarImageData {
         let forecastTimestamp = source.addingTimeInterval(TimeInterval(offset * 60))
-        let urlString = Constants.Radar.forecastURL(for: source, offsetMinutes: offset, quality: SettingsService.shared.imageQuality, productID: productID)
+        let urlString = Constants.Radar.forecastURL(for: source, offsetMinutes: offset, quality: quality, productID: productID)
         return RadarImageData(
             timestamp: forecastTimestamp,
             urlString: urlString,
@@ -500,12 +500,12 @@ class RadarImageSequence: ObservableObject {
     ///    server keeps) so we show that instead of red boxes until the newest
     ///    arrives. `displayedForecastSource` shows whichever loads and promotes to
     ///    the newest once it does.
-    func syncForecastPlaceholders(newestSource: Date?, offsets: [Int], productID: String) {
+    func syncForecastPlaceholders(newestSource: Date?, offsets: [Int], quality: Constants.ImageQuality, productID: String) {
         guard let newestSource else { return }
-        ensureForecastPlaceholders(source: newestSource, offsets: offsets, productID: productID)
+        ensureForecastPlaceholders(source: newestSource, offsets: offsets, quality: quality, productID: productID)
 
         if let anchor = newestSuccessfulObservedImage?.timestamp, shouldFallbackForecast(anchor: anchor) {
-            ensureForecastPlaceholders(source: anchor.previousRadarTime, offsets: offsets, productID: productID)
+            ensureForecastPlaceholders(source: anchor.previousRadarTime, offsets: offsets, quality: quality, productID: productID)
         }
 
         // Failed-newest re-anchor: if the newest mark didn't load (e.g. it 404'd
@@ -519,20 +519,20 @@ class RadarImageSequence: ObservableObject {
         // generation over this one.
         if let loaded = newestSuccessfulObservedImage?.timestamp,
            loaded.roundedToNearestRadarTime != newestSource.roundedToNearestRadarTime {
-            ensureForecastPlaceholders(source: loaded, offsets: offsets, productID: productID)
+            ensureForecastPlaceholders(source: loaded, offsets: offsets, quality: quality, productID: productID)
         }
     }
 
     /// Ensures forecast placeholders exist for the given source, creating any that
     /// are missing. Forecast frames are never created by `syncObservedPlaceholders`,
     /// so they only ever exist for a source `syncForecastPlaceholders` seeded.
-    private func ensureForecastPlaceholders(source: Date, offsets: [Int], productID: String) {
+    private func ensureForecastPlaceholders(source: Date, offsets: [Int], quality: Constants.ImageQuality, productID: String) {
         let missing = offsets.filter { offset in
             let id = RadarFrameID(kind: .forecast(offsetMinutes: offset), source: source)
             return !images.contains { $0.frameID == id }
         }
         guard !missing.isEmpty else { return }
-        images.append(contentsOf: missing.map { makeForecastPlaceholder(source: source, offset: $0, productID: productID) })
+        images.append(contentsOf: missing.map { makeForecastPlaceholder(source: source, offset: $0, quality: quality, productID: productID) })
     }
 
     // MARK: - Fetch coordination
